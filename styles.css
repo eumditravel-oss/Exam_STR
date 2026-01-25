@@ -1,388 +1,141 @@
-:root{
-  --bg:#f3f1ee;
-  --paper:#ffffff;
-  --ink:#1d1d1f;
-  --muted:#6b6b73;
-  --line: rgba(0,0,0,.10);
-  --soft: rgba(0,0,0,.06);
-  --shadow: 0 10px 26px rgba(0,0,0,.10);
-  --radius: 18px;
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>기출문제 랜덤 풀이</title>
+  <link rel="stylesheet" href="styles.css?v=5" />
+</head>
+<body>
+  <!-- HOME -->
+  <section id="home" class="screen">
+    <div class="home-wrap">
+      <div class="home-card">
+        <div class="home-title">기출문제 랜덤 풀이</div>
+        <div class="home-sub">과목 선택 → 랜덤 문항 수 선택 → 풀이 → 결과</div>
 
-  --accent:#f08a24;
-  --accent2:#ffb55a;
+        <div class="subject-grid">
+          <button class="subject-btn" data-subject="재무회계">1. 재무회계</button>
+          <button class="subject-btn disabled" data-subject="원가관리회계" disabled>2. 원가관리회계 (준비중)</button>
+          <button class="subject-btn disabled" data-subject="제조원가실무" disabled>3. 제조원가실무 (준비중)</button>
+          <button class="subject-btn disabled" data-subject="공사기타원가회계" disabled>4. 공사기타원가회계 (준비중)</button>
+          <button class="subject-btn disabled" data-subject="제도및법규" disabled>5. 제도및법규 (준비중)</button>
+        </div>
 
-  --safeTop: env(safe-area-inset-top, 0px);
-  --safeBottom: env(safe-area-inset-bottom, 0px);
-}
+        <div class="home-foot">
+          <a class="link" href="editor.html">좌표 찍기 도구 열기(editor.html)</a>
+        </div>
+      </div>
+    </div>
+  </section>
 
-*{ box-sizing:border-box; }
-html,body{ height:100%; }
-body{
-  margin:0;
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans KR", Arial, "Apple SD Gothic Neo", "Malgun Gothic";
-  background: var(--bg);
-  color: var(--ink);
-}
+  <!-- PICK COUNT -->
+  <section id="pick" class="screen hidden">
+    <div class="pick-wrap">
+      <div class="pick-card">
+        <div class="pick-title" id="pickTitle">과목 선택</div>
+        <div class="pick-sub">전체 문제 중 몇 문제를 랜덤으로 풀까요?</div>
 
-.hidden{ display:none !important; }
-.screen{ min-height:100vh; }
+        <div class="pick-row">
+          <input id="countInput" type="number" min="1" value="20" />
+          <button id="btnStart" class="btn primary">시작</button>
+        </div>
 
-/* HOME */
-.home-wrap, .pick-wrap{
-  min-height:100vh;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  padding: 18px;
-}
-.home-card, .pick-card{
-  width:min(720px, 100%);
-  background: rgba(255,255,255,.92);
-  border: 1px solid var(--soft);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 16px 16px 14px;
-}
-.home-title{
-  font-weight: 1000;
-  font-size: 22px;
-  letter-spacing:-.2px;
-}
-.home-sub{
-  margin-top:6px;
-  color: var(--muted);
-  font-size: 14px;
-}
-.subject-grid{
-  display:grid;
-  grid-template-columns: 1fr;
-  gap:10px;
-  margin-top:14px;
-}
-.subject-btn{
-  height:48px;
-  border-radius: 14px;
-  border: 1px solid rgba(0,0,0,.10);
-  background: #fff;
-  font-weight: 900;
-  cursor:pointer;
-  text-align:left;
-  padding: 0 14px;
-  transition: transform .05s ease, box-shadow .15s ease;
-}
-.subject-btn:active{ transform: scale(.99); }
-.subject-btn:hover{ box-shadow: 0 10px 18px rgba(0,0,0,.08); }
-.subject-btn.disabled{ opacity:.45; cursor:not-allowed; }
-.home-foot{
-  margin-top:12px;
-  display:flex;
-  justify-content:flex-end;
-}
-.link{
-  color: var(--muted);
-  text-decoration:none;
-  font-size: 13px;
-}
-.link:hover{ text-decoration:underline; }
+        <div class="pick-hint" id="pickHint">문항 수를 불러오는 중...</div>
 
-/* PICK */
-.pick-title{ font-weight:1000; font-size: 18px; }
-.pick-sub{ margin-top:6px; color: var(--muted); font-size: 14px; }
-.pick-row{ margin-top:14px; display:flex; gap:10px; }
-#countInput{
-  flex:1;
-  height: 46px;
-  border-radius: 14px;
-  border: 1px solid rgba(0,0,0,.12);
-  padding: 0 12px;
-  font-size: 16px;
-}
-.btn{
-  height:46px;
-  border-radius: 14px;
-  border: 1px solid rgba(0,0,0,.12);
-  background:#fff;
-  font-weight: 900;
-  padding: 0 14px;
-  cursor:pointer;
-}
-.btn.primary{
-  border-color: rgba(240,138,36,.35);
-  background: linear-gradient(180deg, rgba(255,255,255,1), rgba(255,245,236,1));
-}
-.pick-hint{ margin-top:10px; color: var(--muted); font-size: 13px; }
-.pick-actions{ margin-top: 14px; display:flex; justify-content:flex-start; }
+        <div class="pick-actions">
+          <button id="btnBackHome" class="btn">← 과목 다시 선택</button>
+        </div>
+      </div>
+    </div>
+  </section>
 
-/* TOPBAR */
-.topbar{
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  padding: calc(10px + var(--safeTop)) 12px 10px;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap: 10px;
+  <!-- QUIZ -->
+  <section id="quiz" class="screen hidden">
+    <header class="topbar">
+      <button id="btnExit" class="icon-btn" title="나가기">✕</button>
+      <button id="btnMenu" class="icon-btn" title="메뉴">⋯</button>
 
-  background: rgba(255,255,255,.92);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(0,0,0,.06);
-}
-.icon-btn{
-  width:42px;
-  height:42px;
-  border-radius: 14px;
-  border: 1px solid rgba(0,0,0,.10);
-  background:#fff;
-  font-size: 18px;
-  cursor:pointer;
-}
-.timer-pill{
-  flex:1;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  gap: 8px;
-  height: 42px;
-  border-radius: 999px;
-  border: 1px solid rgba(0,0,0,.10);
-  background:#fff;
-  font-weight: 900;
-}
-.timer-ico{ opacity:.75; }
-.topbar-right-spacer{ width:42px; height:42px; }
+      <div class="timer-pill">
+        <span id="timerText">00:00</span>
+        <span class="timer-ico" aria-hidden="true">⏱</span>
+      </div>
 
-/* QUIZ MAIN */
-.quiz-main{
-  padding: 14px 14px calc(92px + var(--safeBottom));
-}
-.q-head{
-  display:flex;
-  align-items:flex-end;
-  justify-content:space-between;
-  gap: 10px;
-}
-.q-title{ font-size: 18px; font-weight: 1000; }
-.q-sep{ color: var(--muted); margin:0 6px; font-weight:700; }
-.q-meta{ color: var(--muted); font-size: 13px; font-weight: 800; }
+      <!-- ✅ 풀이중엔 채점/해설 없음 -->
+      <div class="topbar-right-spacer"></div>
+    </header>
 
-.q-image-stack{
-  margin-top: 12px;
-  display:flex;
-  flex-direction:column;
-  gap: 10px;
-}
+    <main class="quiz-main">
+      <div class="q-head">
+        <div class="q-title">
+          <span id="qNo">1번</span>
+          <span class="q-sep">·</span>
+          <span id="qStatus">풀이</span>
+        </div>
+        <div class="q-meta" id="qMeta">재무회계 / 10회</div>
+      </div>
 
-/* Crop card */
-.crop-card{
-  background:#fff;
-  border: 1px solid rgba(0,0,0,.08);
-  border-radius: 16px;
-  box-shadow: 0 12px 24px rgba(0,0,0,.06);
-  overflow:hidden;
-}
-.crop-box{
-  width:100%;
-  position:relative;
-  overflow:hidden;
-  background:#f7f6f3;
-  height: 520px; /* JS에서 자동 height로 덮어씀 */
-}
-.crop-note{
-  padding: 10px 12px;
-  border-top: 1px solid rgba(0,0,0,.06);
-  font-size: 12px;
-  color: var(--muted);
-}
-.crop-img-el{
-  display:block;
-  user-select:none;
-  -webkit-user-drag:none;
-}
-.spacer{ height: 12px; }
+      <div id="qImageStack" class="q-image-stack"></div>
 
-/* BOTTOMBAR */
-.bottombar{
-  position: fixed;
-  left:0; right:0; bottom:0;
-  z-index: 20;
-  padding: 10px 12px calc(10px + var(--safeBottom));
-  display:flex;
-  align-items:center;
-  gap: 10px;
+      <div class="spacer"></div>
+    </main>
 
-  background: rgba(255,255,255,.92);
-  backdrop-filter: blur(10px);
-  border-top: 1px solid rgba(0,0,0,.06);
-}
-.progress{ min-width: 62px; font-weight: 1000; color: var(--muted); }
-.choice-dots{
-  flex: 1;
-  display:flex;
-  justify-content:center;
-  gap: 10px;
-}
-.dot{
-  width: 42px;
-  height: 42px;
-  border-radius: 999px;
-  border: 1px solid rgba(0,0,0,.12);
-  background:#fff;
-  font-weight: 1000;
-  cursor:pointer;
-}
-.dot.selected{
-  border-color: rgba(240,138,36,.6);
-  box-shadow: 0 10px 18px rgba(240,138,36,.18);
-}
-.next-btn{
-  width: 46px;
-  height: 46px;
-  border-radius: 14px;
-  border: 1px solid rgba(0,0,0,.12);
-  background:#fff;
-  font-size: 22px;
-  font-weight: 1000;
-  cursor:pointer;
-}
+    <footer class="bottombar">
+      <div class="progress">
+        <span id="progressText">1/20</span>
+      </div>
 
-/* Sheet */
-.sheet{
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  background: rgba(0,0,0,.30);
-  display:flex;
-  align-items:flex-end;
-  justify-content:center;
-  padding: 14px;
-}
-.sheet-card{
-  width:min(560px, 100%);
-  background:#fff;
-  border-radius: 18px;
-  border: 1px solid rgba(0,0,0,.10);
-  box-shadow: 0 18px 42px rgba(0,0,0,.18);
-  padding: 12px;
-}
-.sheet-title{ font-weight: 1000; margin: 2px 4px 10px; }
-.sheet-item{
-  width:100%;
-  height: 46px;
-  border-radius: 14px;
-  border: 1px solid rgba(0,0,0,.10);
-  background:#fff;
-  font-weight: 900;
-  cursor:pointer;
-  margin-top: 8px;
-}
+      <div class="choice-dots" id="choiceDots">
+        <button class="dot" data-choice="1">1</button>
+        <button class="dot" data-choice="2">2</button>
+        <button class="dot" data-choice="3">3</button>
+        <button class="dot" data-choice="4">4</button>
+      </div>
 
-/* Toast */
-.toast{
-  position: fixed;
-  left: 50%;
-  bottom: calc(74px + var(--safeBottom));
-  transform: translateX(-50%);
-  z-index: 60;
-  background: rgba(20,20,22,.92);
-  color:#fff;
-  padding: 10px 12px;
-  border-radius: 14px;
-  font-weight: 900;
-  font-size: 13px;
-  max-width: 86vw;
-  text-align:center;
-}
+      <button id="btnNext" class="next-btn" title="다음">›</button>
+    </footer>
 
-/* RESULT */
-.result-main{
-  padding: 14px 14px calc(14px + var(--safeBottom));
-}
-.result-card{
-  background: rgba(255,255,255,.92);
-  border: 1px solid rgba(0,0,0,.08);
-  border-radius: 18px;
-  box-shadow: 0 12px 24px rgba(0,0,0,.08);
-  padding: 14px;
-}
-.result-score .big{
-  font-weight: 1000;
-  font-size: 22px;
-}
-.result-score .sub{
-  margin-top: 6px;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 800;
-}
-.result-actions{
-  margin-top: 12px;
-  display:flex;
-  gap: 10px;
-}
-.result-list{
-  margin-top: 12px;
-  display:flex;
-  flex-direction:column;
-  gap: 10px;
-}
+    <!-- MENU SHEET -->
+    <div id="sheet" class="sheet hidden">
+      <div class="sheet-card">
+        <div class="sheet-title">메뉴</div>
+        <button id="btnReset" class="sheet-item">처음부터 다시</button>
+        <button id="btnCloseSheet" class="sheet-item">닫기</button>
+      </div>
+    </div>
 
-/* 오답 카드 */
-.wrong-card{
-  background:#fff;
-  border: 1px solid rgba(0,0,0,.08);
-  border-radius: 16px;
-  box-shadow: 0 10px 22px rgba(0,0,0,.06);
-  overflow:hidden;
-}
-.wrong-head{
-  padding: 10px 12px;
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  gap: 10px;
-  border-bottom: 1px solid rgba(0,0,0,.06);
-}
-.wrong-title{
-  font-weight: 1000;
-  font-size: 14px;
-}
-.pill{
-  font-size: 12px;
-  font-weight: 900;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(0,0,0,.10);
-  background: rgba(0,0,0,.03);
-  white-space: nowrap;
-}
-.pill.bad{ border-color: rgba(240,0,0,.18); background: rgba(240,0,0,.06); }
-.pill.good{ border-color: rgba(0,0,0,.14); background: rgba(0,0,0,.04); }
+    <!-- TOAST -->
+    <div id="toast" class="toast hidden"></div>
+  </section>
 
-.wrong-body{
-  padding: 12px;
-  display:flex;
-  flex-direction:column;
-  gap: 10px;
-}
-.qa-row{
-  display:flex;
-  gap:10px;
-  align-items:baseline;
-  font-size: 13px;
-}
-.qa-row .k{
-  width: 70px;
-  color: rgba(0,0,0,.55);
-  font-weight: 800;
-}
-.qa-row .v{
-  font-weight: 1000;
-}
-.explain-box{
-  border-top: 1px dashed rgba(0,0,0,.12);
-  padding-top: 10px;
-  font-size: 13px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-}
+  <!-- RESULT -->
+  <section id="result" class="screen hidden">
+    <header class="topbar">
+      <button id="btnResultHome" class="icon-btn" title="홈">⌂</button>
+      <div class="timer-pill">
+        <span id="resultTitle">결과</span>
+      </div>
+      <button id="btnRetry" class="icon-btn" title="다시">↻</button>
+    </header>
+
+    <main class="result-main">
+      <div class="result-card">
+        <div class="result-score">
+          <div class="big" id="scoreText">-</div>
+          <div class="sub" id="scoreMeta">-</div>
+        </div>
+
+        <div class="result-actions">
+          <button id="btnOnlyWrong" class="btn primary">오답만 보기</button>
+          <button id="btnAllList" class="btn">전체 보기</button>
+          <button id="btnRetryWrong" class="btn">오답만 다시 풀기</button>
+        </div>
+      </div>
+
+      <div id="resultList" class="result-list"></div>
+    </main>
+  </section>
+
+  <script src="app.js?v=5"></script>
+</body>
+</html>
