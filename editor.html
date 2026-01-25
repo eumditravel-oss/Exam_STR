@@ -8,8 +8,8 @@
     body{ margin:0; font-family: system-ui, -apple-system, "Noto Sans KR", sans-serif; background:#f3f1ee; }
     header{ position:sticky; top:0; background:rgba(243,241,238,.95); backdrop-filter: blur(8px);
       border-bottom:1px solid rgba(0,0,0,.08); padding:10px 12px; display:flex; gap:10px; align-items:center; }
-    input, select, button{ height:36px; border-radius:10px; border:1px solid rgba(0,0,0,.12); padding:0 10px; background:#fff; }
-    button{ cursor:pointer; font-weight:800; }
+    input, button{ height:36px; border-radius:10px; border:1px solid rgba(0,0,0,.12); padding:0 10px; background:#fff; }
+    button{ cursor:pointer; font-weight:900; }
     main{ padding:12px; }
     .wrap{ display:grid; grid-template-columns: 1fr 360px; gap:12px; align-items:start; }
     @media(max-width:980px){ .wrap{ grid-template-columns: 1fr; } }
@@ -17,19 +17,19 @@
     canvas{ display:block; width:100%; height:auto; }
     .box{ position:absolute; border:2px solid #111; background: rgba(0,0,0,.08); pointer-events:none; }
     .panel{ background:#fff; border:1px solid rgba(0,0,0,.08); border-radius:14px; padding:12px; }
-    textarea{ width:100%; height:280px; border-radius:12px; border:1px solid rgba(0,0,0,.12); padding:10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    textarea{ width:100%; height:320px; border-radius:12px; border:1px solid rgba(0,0,0,.12); padding:10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .hint{ color:#666; font-size:13px; line-height:1.5; margin-top:8px; }
     .row{ display:flex; gap:8px; flex-wrap:wrap; margin:8px 0; }
-    .hint{ color:#666; font-size:13px; line-height:1.4; }
     .tag{ display:inline-block; padding:4px 8px; border-radius:999px; background:#f3f1ee; border:1px solid rgba(0,0,0,.08); font-size:12px; }
   </style>
 </head>
 <body>
 <header>
-  <span style="font-weight:900;">Crop Editor</span>
-  <input id="imgPath" style="flex:1; min-width:240px;" placeholder='예: assets/pages/재무회계/10회/p34.jpg' />
-  <input id="qId" style="width:160px;" placeholder="예: 재무회계-10-001" />
+  <span style="font-weight:1000;">Crop Editor</span>
+  <input id="imgPath" style="flex:1; min-width:240px;"
+    placeholder='예: assets/pages/재무회계/10회/10회_재무회계_01.jpg' />
   <button id="btnLoad">불러오기</button>
-  <button id="btnClear">박스 지우기</button>
+  <button id="btnClear">지우기</button>
 </header>
 
 <main>
@@ -42,20 +42,20 @@
     <div class="panel">
       <div class="row">
         <span class="tag">드래그로 영역 선택</span>
-        <span class="tag">좌표는 0~1 비율</span>
+        <span class="tag">0~1 좌표 저장</span>
       </div>
       <div class="hint">
         1) 이미지 경로 입력 → 불러오기<br/>
         2) 문제 영역 드래그<br/>
-        3) 오른쪽 JSON을 bank.json의 parts에 붙여넣기<br/>
-        * 페이지 넘어가면 같은 문제에 parts를 2개 추가하면 됨
+        3) 아래 JSON을 bank.json의 parts[n].crop에 복붙<br/>
+        (crop만 붙이는 게 아니라, parts 객체 자체를 교체해도 OK)
       </div>
 
       <div class="row" style="margin-top:10px;">
         <button id="btnCopy">JSON 복사</button>
       </div>
 
-      <textarea id="out" placeholder="여기에 결과 JSON이 생성됩니다."></textarea>
+      <textarea id="out" placeholder="결과 JSON"></textarea>
     </div>
   </div>
 </main>
@@ -66,7 +66,6 @@ const ctx = cv.getContext('2d');
 const stage = document.getElementById('stage');
 const box = document.getElementById('box');
 const imgPath = document.getElementById('imgPath');
-const qId = document.getElementById('qId');
 const out = document.getElementById('out');
 
 let img = new Image();
@@ -87,7 +86,7 @@ document.getElementById('btnLoad').onclick = () => {
     box.hidden = true;
     out.value = '';
   };
-  img.onerror = () => alert('이미지를 불러오지 못했습니다. 경로를 확인하세요.');
+  img.onerror = () => alert('이미지를 불러오지 못했습니다. 경로/파일명을 확인하세요.');
   img.src = src;
 };
 
@@ -164,8 +163,9 @@ function updateBox(){
   const scaleX = rect.width / cv.width;
   const scaleY = rect.height / cv.height;
 
-  box.style.left = (rect.left + x1*scaleX - stage.getBoundingClientRect().left + stage.scrollLeft) + 'px';
-  box.style.top  = (rect.top  + y1*scaleY - stage.getBoundingClientRect().top  + stage.scrollTop) + 'px';
+  const stageRect = stage.getBoundingClientRect();
+  box.style.left = (rect.left + x1*scaleX - stageRect.left + stage.scrollLeft) + 'px';
+  box.style.top  = (rect.top  + y1*scaleY - stageRect.top  + stage.scrollTop) + 'px';
   box.style.width  = ((x2-x1)*scaleX) + 'px';
   box.style.height = ((y2-y1)*scaleY) + 'px';
 }
