@@ -6,21 +6,68 @@
   <title>Crop Editor</title>
   <style>
     body{ margin:0; font-family: system-ui, -apple-system, "Noto Sans KR", sans-serif; background:#f3f1ee; }
-    header{ position:sticky; top:0; background:rgba(243,241,238,.95); backdrop-filter: blur(8px);
-      border-bottom:1px solid rgba(0,0,0,.08); padding:10px 12px; display:flex; gap:10px; align-items:center; }
-    input, button{ height:36px; border-radius:10px; border:1px solid rgba(0,0,0,.12); padding:0 10px; background:#fff; }
+    header{
+      position:sticky; top:0; z-index:10;
+      background:rgba(243,241,238,.95); backdrop-filter: blur(8px);
+      border-bottom:1px solid rgba(0,0,0,.08);
+      padding:10px 12px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+    }
+    input, button{
+      height:36px; border-radius:10px; border:1px solid rgba(0,0,0,.12);
+      padding:0 10px; background:#fff;
+    }
     button{ cursor:pointer; font-weight:900; }
     main{ padding:12px; }
     .wrap{ display:grid; grid-template-columns: 1fr 360px; gap:12px; align-items:start; }
     @media(max-width:980px){ .wrap{ grid-template-columns: 1fr; } }
-    .stage{ position:relative; background:#fff; border:1px solid rgba(0,0,0,.08); border-radius:14px; overflow:auto; }
+
+    .stage{
+      position:relative;
+      background:#fff;
+      border:1px solid rgba(0,0,0,.08);
+      border-radius:14px;
+      overflow:auto;
+      max-height: calc(100vh - 90px);
+      touch-action: none; /* ✅ 드래그 중 스크롤/줌 방지 */
+    }
     canvas{ display:block; width:100%; height:auto; }
-    .box{ position:absolute; border:2px solid #111; background: rgba(0,0,0,.08); pointer-events:none; }
+
+    .box{
+      position:absolute;
+      border:2px solid #111;
+      background: rgba(0,0,0,.10);
+      pointer-events:none;
+      box-shadow: 0 8px 20px rgba(0,0,0,.12);
+    }
+
     .panel{ background:#fff; border:1px solid rgba(0,0,0,.08); border-radius:14px; padding:12px; }
-    textarea{ width:100%; height:320px; border-radius:12px; border:1px solid rgba(0,0,0,.12); padding:10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    textarea{
+      width:100%; height:340px;
+      border-radius:12px; border:1px solid rgba(0,0,0,.12);
+      padding:10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      line-height: 1.4;
+    }
     .hint{ color:#666; font-size:13px; line-height:1.5; margin-top:8px; }
     .row{ display:flex; gap:8px; flex-wrap:wrap; margin:8px 0; }
-    .tag{ display:inline-block; padding:4px 8px; border-radius:999px; background:#f3f1ee; border:1px solid rgba(0,0,0,.08); font-size:12px; }
+    .tag{
+      display:inline-block; padding:4px 8px; border-radius:999px;
+      background:#f3f1ee; border:1px solid rgba(0,0,0,.08);
+      font-size:12px;
+    }
+    .kv{
+      display:grid;
+      grid-template-columns: 92px 1fr;
+      gap:6px 10px;
+      margin-top:10px;
+      font-size: 13px;
+      align-items: center;
+    }
+    .kv b{ font-variant-numeric: tabular-nums; }
+    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .btnline{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+    .btnline button{ flex:1; min-width: 120px; }
   </style>
 </head>
 <body>
@@ -42,16 +89,26 @@
     <div class="panel">
       <div class="row">
         <span class="tag">드래그로 영역 선택</span>
-        <span class="tag">0~1 좌표 저장</span>
+        <span class="tag">✅ 0~1 좌표(정규화) 저장</span>
+        <span class="tag">iPad 터치 지원</span>
       </div>
+
       <div class="hint">
         1) 이미지 경로 입력 → 불러오기<br/>
         2) 문제 영역 드래그<br/>
-        3) 아래 JSON을 bank.json의 parts[n].crop에 복붙<br/>
-        (crop만 붙이는 게 아니라, parts 객체 자체를 교체해도 OK)
+        3) 아래 JSON을 <b>bank.json의 해당 parts[n]</b>에 그대로 복붙
       </div>
 
-      <div class="row" style="margin-top:10px;">
+      <div class="kv">
+        <div>이미지 크기</div>
+        <div><b id="imgSize" class="mono">-</b></div>
+        <div>선택(px)</div>
+        <div><b id="selPx" class="mono">-</b></div>
+        <div>선택(0~1)</div>
+        <div><b id="selNorm" class="mono">-</b></div>
+      </div>
+
+      <div class="btnline">
         <button id="btnCopy">JSON 복사</button>
       </div>
 
@@ -68,23 +125,92 @@ const box = document.getElementById('box');
 const imgPath = document.getElementById('imgPath');
 const out = document.getElementById('out');
 
+const imgSizeEl = document.getElementById('imgSize');
+const selPxEl = document.getElementById('selPx');
+const selNormEl = document.getElementById('selNorm');
+
 let img = new Image();
 img.crossOrigin = "anonymous";
 let imgW=0, imgH=0;
 
 let dragging=false, sx=0, sy=0, ex=0, ey=0;
 
+function setInfo(pxText, normText){
+  selPxEl.textContent = pxText || "-";
+  selNormEl.textContent = normText || "-";
+}
+
+function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+
+// ✅ stage scroll 고려해서 "캔버스 좌표"로 변환
+function clientToCanvasXY(clientX, clientY){
+  const rect = cv.getBoundingClientRect();
+  const x = (clientX - rect.left) * (cv.width / rect.width);
+  const y = (clientY - rect.top) * (cv.height / rect.height);
+  return {x, y};
+}
+
+// ✅ 선택 박스 화면 표시(스크롤/리사이즈 대응)
+function updateBox(){
+  const x1 = Math.min(sx, ex);
+  const y1 = Math.min(sy, ey);
+  const x2 = Math.max(sx, ex);
+  const y2 = Math.max(sy, ey);
+
+  const rect = cv.getBoundingClientRect();
+  const stageRect = stage.getBoundingClientRect();
+
+  const scaleX = rect.width / cv.width;
+  const scaleY = rect.height / cv.height;
+
+  // stage 안에서의 위치로 변환
+  const left = (rect.left - stageRect.left) + stage.scrollLeft + x1*scaleX;
+  const top  = (rect.top  - stageRect.top ) + stage.scrollTop  + y1*scaleY;
+
+  box.style.left = left + 'px';
+  box.style.top  = top  + 'px';
+  box.style.width  = ((x2-x1)*scaleX) + 'px';
+  box.style.height = ((y2-y1)*scaleY) + 'px';
+
+  // 실시간 값 표시
+  if(imgW && imgH){
+    const cx1 = clamp(Math.min(sx, ex), 0, imgW);
+    const cy1 = clamp(Math.min(sy, ey), 0, imgH);
+    const cx2 = clamp(Math.max(sx, ex), 0, imgW);
+    const cy2 = clamp(Math.max(sy, ey), 0, imgH);
+    const w = Math.max(1, cx2 - cx1);
+    const h = Math.max(1, cy2 - cy1);
+
+    const nx = +(cx1 / imgW).toFixed(4);
+    const ny = +(cy1 / imgH).toFixed(4);
+    const nw = +(w  / imgW).toFixed(4);
+    const nh = +(h  / imgH).toFixed(4);
+
+    setInfo(
+      `x:${Math.round(cx1)} y:${Math.round(cy1)} w:${Math.round(w)} h:${Math.round(h)}`,
+      `x:${nx} y:${ny} w:${nw} h:${nh}`
+    );
+  }
+}
+
 document.getElementById('btnLoad').onclick = () => {
   const src = imgPath.value.trim();
   if(!src) return alert('이미지 경로를 입력하세요.');
+
   img = new Image();
+  img.crossOrigin = "anonymous";
   img.onload = () => {
     imgW = img.naturalWidth; imgH = img.naturalHeight;
     cv.width = imgW; cv.height = imgH;
+    ctx.clearRect(0,0,imgW,imgH);
     ctx.drawImage(img, 0, 0);
+
+    imgSizeEl.textContent = `${imgW} × ${imgH}`;
     stage.scrollTop = 0; stage.scrollLeft = 0;
+
     box.hidden = true;
     out.value = '';
+    setInfo("-", "-");
   };
   img.onerror = () => alert('이미지를 불러오지 못했습니다. 경로/파일명을 확인하세요.');
   img.src = src;
@@ -93,52 +219,56 @@ document.getElementById('btnLoad').onclick = () => {
 document.getElementById('btnClear').onclick = () => {
   box.hidden = true;
   out.value = '';
+  setInfo("-", "-");
 };
 
 document.getElementById('btnCopy').onclick = async () => {
+  const text = out.value.trim();
+  if(!text) return alert('복사할 JSON이 없습니다. 먼저 영역을 선택하세요.');
   try{
-    await navigator.clipboard.writeText(out.value);
+    await navigator.clipboard.writeText(text);
     alert('복사 완료!');
   }catch(e){
-    alert('복사 실패. 텍스트를 직접 복사해주세요.');
+    alert('복사 실패. 텍스트를 직접 선택해서 복사해주세요.');
   }
 };
 
-function clientToCanvasXY(clientX, clientY){
-  const rect = cv.getBoundingClientRect();
-  const x = (clientX - rect.left) * (cv.width / rect.width);
-  const y = (clientY - rect.top) * (cv.height / rect.height);
-  return {x, y};
-}
-
-cv.addEventListener('mousedown', (e) => {
+// ✅ 포인터 이벤트(마우스+터치 통합)
+cv.addEventListener('pointerdown', (e) => {
   if(!imgW) return;
+  e.preventDefault();
+  cv.setPointerCapture(e.pointerId);
+
   dragging = true;
   const p = clientToCanvasXY(e.clientX, e.clientY);
   sx = p.x; sy = p.y; ex = p.x; ey = p.y;
+
   box.hidden = false;
   updateBox();
 });
 
-window.addEventListener('mousemove', (e) => {
+cv.addEventListener('pointermove', (e) => {
   if(!dragging) return;
+  e.preventDefault();
   const p = clientToCanvasXY(e.clientX, e.clientY);
   ex = p.x; ey = p.y;
   updateBox();
 });
 
-window.addEventListener('mouseup', () => {
+cv.addEventListener('pointerup', (e) => {
   if(!dragging) return;
+  e.preventDefault();
   dragging = false;
 
-  const x1 = Math.max(0, Math.min(sx, ex));
-  const y1 = Math.max(0, Math.min(sy, ey));
-  const x2 = Math.min(imgW, Math.max(sx, ex));
-  const y2 = Math.min(imgH, Math.max(sy, ey));
+  const x1 = clamp(Math.min(sx, ex), 0, imgW);
+  const y1 = clamp(Math.min(sy, ey), 0, imgH);
+  const x2 = clamp(Math.max(sx, ex), 0, imgW);
+  const y2 = clamp(Math.max(sy, ey), 0, imgH);
 
   const w = Math.max(1, x2 - x1);
   const h = Math.max(1, y2 - y1);
 
+  // ✅ 0~1 정규화(앱 crop 계산과 호환)
   const nx = +(x1 / imgW).toFixed(4);
   const ny = +(y1 / imgH).toFixed(4);
   const nw = +(w  / imgW).toFixed(4);
@@ -153,22 +283,12 @@ window.addEventListener('mouseup', () => {
   out.value = JSON.stringify(json, null, 2);
 });
 
-function updateBox(){
-  const x1 = Math.min(sx, ex);
-  const y1 = Math.min(sy, ey);
-  const x2 = Math.max(sx, ex);
-  const y2 = Math.max(sy, ey);
-
-  const rect = cv.getBoundingClientRect();
-  const scaleX = rect.width / cv.width;
-  const scaleY = rect.height / cv.height;
-
-  const stageRect = stage.getBoundingClientRect();
-  box.style.left = (rect.left + x1*scaleX - stageRect.left + stage.scrollLeft) + 'px';
-  box.style.top  = (rect.top  + y1*scaleY - stageRect.top  + stage.scrollTop) + 'px';
-  box.style.width  = ((x2-x1)*scaleX) + 'px';
-  box.style.height = ((y2-y1)*scaleY) + 'px';
-}
+window.addEventListener('resize', () => {
+  if(!box.hidden) updateBox();
+});
+stage.addEventListener('scroll', () => {
+  if(!box.hidden) updateBox();
+});
 </script>
 </body>
 </html>
