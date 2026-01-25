@@ -1,332 +1,324 @@
-// app.js - MVP: 과목 선택 → 문항수 선택 → 랜덤 출제(기본 UI)
-// - data/bank.json 로드 (subject 필터)
-// - 이후 parts[] 크롭 렌더링 로직만 붙이면 완성
+/* app.js - Image-based Quiz (bank.json 기반)
+   - 과목 선택 → 랜덤 문항 수 선택 → 풀이 UI
+   - 답안/해설은 현재 null/빈값이어도 동작 (채점 시 안내)
+*/
 
-const SUBJECTS = [
-  "재무회계",
-  "원가관리회계",
-  "제조원가실무",
-  "공사기타원가회계",
-  "제도및법규"
-];
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
-let bank = [];               // 전체 문제은행
-let pool = [];               // 선택 과목 문제 풀
-let quiz = [];               // 출제된 문제 리스트(랜덤)
-let answers = new Map();     // id -> 선택답
-let currentIndex = 0;
+const SCREENS = {
+  home: $("#home"),
+  pick: $("#pick"),
+  quiz: $("#quiz"),
+};
 
-let selectedSubject = null;
-let maxCount = 0;
+const state = {
+  subject: null,
+  bank: [],
+  quizItems: [],
+  idx: 0,
+  answers: {},      // { id: 1~4 }
+  graded: {},       // { id: true/false } (채점 버튼 누른 뒤 표시 용)
+  timerStart: null,
+  timerHandle: null,
+};
 
-// timer
-let timerSec = 0;
-let timerHandle = null;
-let paused = false;
-
-// elements
-const el = (id) => document.getElementById(id);
-
-const startScreen = el("startScreen");
-const quizScreen = el("quizScreen");
-const topbar = el("topbar");
-
-const subjectGrid = el("subjectGrid");
-
-const modalBackdrop = el("modalBackdrop");
-const modalSub = el("modalSub");
-const countInput = el("countInput");
-const countHint = el("countHint");
-const btnCancel = el("btnCancel");
-const btnStart = el("btnStart");
-
-const timerText = el("timerText");
-const btnPause = el("btnPause");
-const btnExit = el("btnExit");
-const btnGrade = el("btnGrade");
-
-const tabQuestion = el("tabQuestion");
-const tabExplain = el("tabExplain");
-const tabival들; // placeholder? nope remove. We'll avoid errors.
-
-const tabAnswer = el("tabAnswer");
-
-const qNoText = el("qNoText");
-const qInfoText = el("qInfoText");
-const qBody = el("qBody");
-const qExplain = el("qExplain");
-const qAnswer = el("qAnswer");
-
-const progressText = el("progressText");
-const btnPrev = el("btnPrev");
-const btnNext = el("btnNext");
-const choiceButtons = Array.from(document.querySelectorAll(".choice-btn"));
-
-// ------- init -------
-renderSubjectButtons();
-loadBank();
-
-// ------- UI: subject selection -------
-function renderSubjectButtons(){
-  subjectGrid.innerHTML = "";
-  SUBJECTS.forEach((name) => {
-    const btn = document.createElement("button");
-    btn.className = "subject-btn";
-    btn.innerHTML = `<span class="subject-name">${name}</span><span class="subject-arrow">›</span>`;
-    btn.addEventListener("click", () => onPickSubject(name));
-    subjectGrid.appendChild(btn);
+function showScreen(name){
+  Object.entries(SCREENS).forEach(([k, el]) => {
+    el.classList.toggle("hidden", k !== name);
   });
+}
+
+function toast(msg){
+  const el = $("#toast");
+  el.textContent = msg;
+  el.classList.remove("hidden");
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.add("hidden"), 1600);
 }
 
 async function loadBank(){
-  // bank.json이 없으면 일단 데모 데이터로 동작하도록
-  try{
-    const res = await fetch("data/bank.json");
-    if(!res.ok) throw new Error("bank.json not found");
-    bank = await res.json();
-  }catch(e){
-    // demo data (동작 확인용)
-    bank = [
-      { id:"재무회계-10-001", subject:"재무회계", session:10, no:1, choices:4, answer:3, explain:"(데모) 재무상태표 구성요소..." , parts:[] },
-      { id:"재무회계-10-007", subject:"재무회계", session:10, no:7, choices:4, answer:4, explain:"(데모) 페이지 넘어가는 보기 케이스", parts:[] },
-      { id:"제도및법규-01-001", subject:"제도및법규", session:1, no:1, choices:4, answer:2, explain:"(데모) 법규 문제", parts:[] }
-    ];
+  // GitHub Pages에서 fetch 가능
+  const res = await fetch("data/bank.json?v=" + Date.now());
+  if(!res.ok) throw new Error("bank.json 로드 실패");
+  const data = await res.json();
+  state.bank = Array.isArray(data) ? data : [];
+}
+
+function shuffle(arr){
+  const a = arr.slice();
+  for(let i=a.length-1; i>0; i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i], a[j]] = [a[j], a[i]];
   }
+  return a;
 }
 
-function onPickSubject(name){
-  selectedSubject = name;
-  pool = bank.filter(q => q.subject === name);
-
-  if(pool.length === 0){
-    alert(`"${name}" 과목 데이터가 없습니다.\n먼저 data/bank.json에 문제를 추가해주세요.`);
-    return;
-  }
-
-  maxCount = pool.length;
-  modalSub.textContent = `선택한 과목: ${name}`;
-  countHint.textContent = `최대: ${maxCount} (이 과목 전체 문제 수)`;
-
-  countInput.value = "";
-  openModal();
+function fmtTime(ms){
+  const sec = Math.max(0, Math.floor(ms/1000));
+  const m = Math.floor(sec/60);
+  const s = sec % 60;
+  const mm = String(m).padStart(2,"0");
+  const ss = String(s).padStart(2,"0");
+  return `${mm}:${ss}`;
 }
 
-// ------- Modal controls -------
-btnCancel.addEventListener("click", closeModal);
-
-btnStart.addEventListener("click", () => {
-  const n = Number(countInput.value);
-  if(!Number.isFinite(n) || n <= 0){
-    alert("문항수를 1 이상으로 입력해주세요.");
-    return;
-  }
-  const count = Math.min(n, maxCount);
-  startQuiz(count);
-  closeModal();
-});
-
-function openModal(){
-  modalBackdrop.hidden = false;
-  countInput.focus();
-}
-
-function closeModal(){
-  modalBackdrop.hidden = true;
-}
-
-// ------- Quiz start -------
-function startQuiz(count){
-  quiz = shuffle([...pool]).slice(0, count);
-  answers = new Map();
-  currentIndex = 0;
-
-  // 화면 전환
-  startScreen.hidden = true;
-  quizScreen.hidden = false;
-  topbar.hidden = false;
-
-  // tabs reset
-  setTab("question", false);
-
-  // timer start
-  timerSec = 0;
-  paused = false;
-  btnPause.textContent = "⏸";
-  startTimer();
-
-  renderQuestion();
-}
-
-function exitQuiz(){
-  stopTimer();
-  quiz = [];
-  answers = new Map();
-  currentIndex = 0;
-  selectedSubject = null;
-
-  // 화면 전환
-  topbar.hidden = true;
-  quizScreen.hidden = true;
-  startScreen.hidden = false;
-}
-btnExit.addEventListener("click", () => {
-  if(confirm("시험을 종료하고 처음 화면으로 돌아갈까요?")) exitQuiz();
-});
-
-// ------- Timer -------
 function startTimer(){
-  stopTimer();
-  timerHandle = setInterval(() => {
-    if(paused) return;
-    timerSec++;
-    timerText.textContent = formatTime(timerSec);
-  }, 1000);
+  state.timerStart = Date.now();
+  if(state.timerHandle) clearInterval(state.timerHandle);
+  state.timerHandle = setInterval(() => {
+    $("#timerText").textContent = fmtTime(Date.now() - state.timerStart);
+  }, 250);
 }
 
 function stopTimer(){
-  if(timerHandle){
-    clearInterval(timerHandle);
-    timerHandle = null;
-  }
+  if(state.timerHandle) clearInterval(state.timerHandle);
+  state.timerHandle = null;
 }
 
-btnPause.addEventListener("click", () => {
-  paused = !paused;
-  btnPause.textContent = paused ? "▶" : "⏸";
-});
-
-function formatTime(s){
-  const hh = Math.floor(s/3600);
-  const mm = Math.floor((s%3600)/60);
-  const ss = s%60;
-  return `${String(hh).padStart(2,"0")}:${String(mm).padStart(2,"0")}:${String(ss).padStart(2,"0")}`;
+function pickQuestions(subject, count){
+  const all = state.bank.filter(q => q.subject === subject);
+  const max = all.length;
+  const n = Math.max(1, Math.min(count, max || 1));
+  return shuffle(all).slice(0, n);
 }
 
-// ------- Tabs (문제/해설/정답) -------
-tabQuestion.addEventListener("click", () => setTab("question"));
-tabExplain.addEventListener("click", () => setTab("explain"));
-tabAnswer.addEventListener("click", () => setTab("answer"));
-
-function setTab(mode, keepUnlock=true){
-  // active UI
-  [tabQuestion, tabExplain, tabAnswer].forEach(t => t.classList.remove("active"));
-  if(mode === "question") tabQuestion.classList.add("active");
-  if(mode === "explain") tabExplain.classList.add("active");
-  if(mode === "answer") tabAnswer.classList.add("active");
-
-  // show/hide
-  qBody.hidden = mode !== "question";
-  qExplain.hidden = mode !== "explain";
-  qAnswer.hidden = mode !== "answer";
-
-  // keepUnlock = false일 때는 해설/정답 잠금 유지
-  if(!keepUnlock){
-    tabExplain.disabled = true;
-    tabAnswer.disabled = true;
-  }
-}
-
-// ------- Navigation -------
-btnPrev.addEventListener("click", () => {
-  if(currentIndex > 0){
-    currentIndex--;
-    setTab("question");
-    renderQuestion();
-  }
-});
-
-btnNext.addEventListener("click", () => {
-  if(currentIndex < quiz.length - 1){
-    currentIndex++;
-    setTab("question");
-    renderQuestion();
-  }else{
-    // 마지막 문제 -> 채점 유도
-    if(confirm("마지막 문제입니다. 지금 채점할까요?")) gradeQuiz();
-  }
-});
-
-// ------- Choice selection -------
-choiceButtons.forEach((b) => {
-  b.addEventListener("click", () => {
-    const choice = Number(b.dataset.choice);
-    const q = quiz[currentIndex];
-    answers.set(q.id, choice);
-    renderChoiceState();
-  });
-});
-
-function renderChoiceState(){
-  const q = quiz[currentIndex];
-  const picked = answers.get(q.id) ?? null;
-  choiceButtons.forEach((b) => {
-    const c = Number(b.dataset.choice);
-    b.classList.toggle("active", picked === c);
-  });
-}
-
-// ------- Render Question -------
+/** crop 렌더링:
+ *  - crop이 null이면: 전체 이미지 보여줌(설정 전 상태)
+ *  - crop이 {x,y,w,h}면: background-position/size로 자른 영역만 보이게 구현
+ */
 function renderQuestion(){
-  const q = quiz[currentIndex];
+  const q = state.quizItems[state.idx];
+  if(!q) return;
 
-  qNoText.textContent = `${currentIndex + 1}번`;
-  qInfoText.textContent = `${q.subject} · ${q.session}회 · ${q.no}번`;
-  progressText.textContent = `${currentIndex + 1} / ${quiz.length}`;
+  $("#qNo").textContent = `${q.no}번`;
+  $("#qStatus").textContent = "풀이";
+  $("#qMeta").textContent = `${q.subject} / ${q.session}회`;
+  $("#progressText").textContent = `${state.idx + 1}/${state.quizItems.length}`;
 
-  // (MVP) 문제 표시: 우선 텍스트로. 이후 parts[] 크롭 렌더링로 교체.
-  // q.parts가 있으면 "이미지 기반"임을 표시해두고, 실제 렌더 함수로 교체하면 됨.
-  if(Array.isArray(q.parts) && q.parts.length){
-    qBody.textContent =
-      `[이미지 문제]\n` +
-      `parts: ${q.parts.length}개 (여기에 crop 렌더링 로직 연결)\n\n` +
-      `id: ${q.id}`;
-  }else{
-    qBody.textContent =
-      `(${q.subject} ${q.session}회 ${q.no}번)\n` +
-      `데모 표시입니다. (bank.json 연결 후 교체)\n\n` +
-      `보기는 아래 원형 버튼(1~4)로 선택하세요.`;
-  }
+  // 이미지 스택
+  const stack = $("#qImageStack");
+  stack.innerHTML = "";
 
-  qExplain.textContent = q.explain ? q.explain : "해설이 아직 없습니다.";
-  qAnswer.textContent = q.answer ? `정답: ${q.answer}` : "정답 정보가 없습니다.";
+  const parts = Array.isArray(q.parts) && q.parts.length ? q.parts : [];
+  parts.forEach((p, pidx) => {
+    const card = document.createElement("div");
+    card.className = "crop-card";
 
-  renderChoiceState();
-}
+    const box = document.createElement("div");
+    box.className = "crop-box";
 
-// ------- Grade -------
-btnGrade.addEventListener("click", () => gradeQuiz());
+    const img = document.createElement("div");
+    img.className = "crop-img";
 
-function gradeQuiz(){
-  stopTimer();
+    const src = p.pageImage;
+    img.style.backgroundImage = `url("${src}")`;
 
-  let correct = 0;
-  const total = quiz.length;
+    if(p.crop && typeof p.crop.x === "number"){
+      // crop 영역을 박스 전체에 꽉 차게(cover처럼) 보이도록:
+      // background-size는 (1/w, 1/h) 배 확대
+      const bx = p.crop.x, by = p.crop.y, bw = p.crop.w, bh = p.crop.h;
+      const scaleX = 1 / Math.max(0.0001, bw);
+      const scaleY = 1 / Math.max(0.0001, bh);
 
-  quiz.forEach((q) => {
-    const picked = answers.get(q.id);
-    if(picked === q.answer) correct++;
+      img.style.backgroundSize = `${scaleX*100}% ${scaleY*100}%`;
+      img.style.backgroundPosition = `${(-bx/(bw))*100}% ${(-by/(bh))*100}%`;
+      // 위 계산은 직관적이지만 브라우저마다 느낌이 달 수 있어
+      // 실제로는 editor로 좌표 찍고 확인하면서 미세 보정 가능
+    }else{
+      // crop 미설정: 전체 페이지 표시
+      img.style.backgroundSize = "contain";
+      img.style.backgroundPosition = "center";
+      img.style.backgroundColor = "#fff";
+    }
+
+    box.appendChild(img);
+
+    const note = document.createElement("div");
+    note.className = "crop-note";
+    if(p.crop){
+      note.textContent = `part ${pidx+1} / crop 적용`;
+    }else{
+      note.textContent = `part ${pidx+1} / crop 미설정(전체 페이지 표시)`;
+    }
+
+    card.appendChild(box);
+    card.appendChild(note);
+    stack.appendChild(card);
   });
 
-  // 해설/정답 탭 활성화
-  tabExplain.disabled = false;
-  tabAnswer.disabled = false;
+  // 선택 표시
+  const selected = state.answers[q.id] ?? null;
+  $$("#choiceDots .dot").forEach(btn => {
+    const c = Number(btn.dataset.choice);
+    btn.classList.toggle("selected", selected === c);
+    btn.classList.remove("correct","wrong");
+  });
 
-  alert(
-    `채점 완료!\n` +
-    `점수: ${correct} / ${total}\n` +
-    `시간: ${formatTime(timerSec)}\n\n` +
-    `상단 탭에서 해설/정답을 확인할 수 있어요.`
-  );
-
-  // 채점 후에는 현재 문제에서 해설 탭으로 이동해도 자연스러움
-  setTab("explain");
-}
-
-// ------- Utils -------
-function shuffle(arr){
-  for(let i = arr.length - 1; i > 0; i--){
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
+  // 채점 표시(정답 데이터 없으면 표시 안 함)
+  if(state.graded[q.id]){
+    paintGrade(q);
   }
-  return arr;
 }
+
+function paintGrade(q){
+  const sel = state.answers[q.id] ?? null;
+  const ans = q.answer; // 현재는 null일 수 있음
+
+  $$("#choiceDots .dot").forEach(btn => {
+    const c = Number(btn.dataset.choice);
+    btn.classList.remove("correct","wrong");
+
+    if(typeof ans === "number"){
+      if(c === ans) btn.classList.add("correct");
+      if(sel !== null && c === sel && sel !== ans) btn.classList.add("wrong");
+    }
+  });
+
+  if(typeof ans !== "number"){
+    toast("이 문항은 아직 정답 데이터가 없습니다.");
+  }else{
+    if(sel === null) toast("선택이 없습니다.");
+    else toast(sel === ans ? "정답!" : "오답");
+  }
+}
+
+function nextQuestion(){
+  if(state.idx < state.quizItems.length - 1){
+    state.idx++;
+    renderQuestion();
+    return;
+  }
+  // 마지막이면 결과 요약(정답 없으면 단순 완료)
+  stopTimer();
+  toast("끝! (정답/해설 세팅 후 점수화 가능)");
+}
+
+function resetAll(){
+  stopTimer();
+  state.subject = null;
+  state.quizItems = [];
+  state.idx = 0;
+  state.answers = {};
+  state.graded = {};
+  $("#timerText").textContent = "00:00";
+  showScreen("home");
+}
+
+function openSheet(){
+  $("#sheet").classList.remove("hidden");
+}
+function closeSheet(){
+  $("#sheet").classList.add("hidden");
+}
+
+async function init(){
+  showScreen("home");
+
+  // 1) bank 로드
+  try{
+    await loadBank();
+  }catch(e){
+    alert("data/bank.json을 불러오지 못했습니다.\n경로/파일명을 확인하세요.\n\n" + e.message);
+    return;
+  }
+
+  // HOME: 과목 선택
+  $$(".subject-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const subj = btn.dataset.subject;
+      if(btn.disabled) return;
+
+      state.subject = subj;
+
+      // 해당 과목 총 문항
+      const total = state.bank.filter(q => q.subject === subj).length;
+      $("#pickTitle").textContent = `${subj} 선택`;
+      $("#pickHint").textContent = `총 ${total}문항 중 랜덤 출제`;
+      $("#countInput").value = Math.min(20, total || 20);
+      $("#countInput").max = total || 999;
+
+      showScreen("pick");
+      setTimeout(()=>$("#countInput").focus(), 50);
+    });
+  });
+
+  $("#btnBackHome").addEventListener("click", () => {
+    showScreen("home");
+  });
+
+  // 시작
+  $("#btnStart").addEventListener("click", () => {
+    if(!state.subject) return;
+
+    const total = state.bank.filter(q => q.subject === state.subject).length;
+    const n = Math.max(1, Math.min(Number($("#countInput").value || 1), total || 1));
+
+    state.quizItems = pickQuestions(state.subject, n);
+    state.idx = 0;
+    state.answers = {};
+    state.graded = {};
+
+    showScreen("quiz");
+    startTimer();
+    renderQuestion();
+  });
+
+  // QUIZ: 선택
+  $$("#choiceDots .dot").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const q = state.quizItems[state.idx];
+      if(!q) return;
+      const c = Number(btn.dataset.choice);
+      state.answers[q.id] = c;
+      renderQuestion();
+    });
+  });
+
+  // 다음
+  $("#btnNext").addEventListener("click", nextQuestion);
+
+  // 채점
+  $("#btnGrade").addEventListener("click", () => {
+    const q = state.quizItems[state.idx];
+    if(!q) return;
+    state.graded[q.id] = true;
+    paintGrade(q);
+  });
+
+  // 나가기(홈으로)
+  $("#btnExit").addEventListener("click", () => {
+    if(confirm("나가면 풀이 기록이 초기화됩니다. 나갈까요?")){
+      resetAll();
+    }
+  });
+
+  // 메뉴
+  $("#btnMenu").addEventListener("click", openSheet);
+  $("#btnCloseSheet").addEventListener("click", closeSheet);
+  $("#sheet").addEventListener("click", (e) => {
+    if(e.target.id === "sheet") closeSheet();
+  });
+
+  $("#btnReset").addEventListener("click", () => {
+    closeSheet();
+    if(confirm("처음부터 다시 시작할까요?")){
+      resetAll();
+    }
+  });
+
+  // 키보드(PC 편의)
+  window.addEventListener("keydown", (e) => {
+    if(SCREENS.quiz.classList.contains("hidden")) return;
+
+    if(e.key === "ArrowRight") nextQuestion();
+    if(["1","2","3","4"].includes(e.key)){
+      const q = state.quizItems[state.idx];
+      if(!q) return;
+      state.answers[q.id] = Number(e.key);
+      renderQuestion();
+    }
+  });
+}
+
+init();
