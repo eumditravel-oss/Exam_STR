@@ -1,6 +1,8 @@
 /* app.js - Image-based Quiz (bank.json + answers.json + explanations.json)
    - 과목 선택 → 랜덤 문항 수 선택 → 풀이 UI
    - 정답/해설은 분리 파일에서 우선 로드 (없으면 bank.json fallback)
+   - ✅ crop: 픽셀(px) 좌표를 "정확히" 잘라서 표시 (img absolute + overflow hidden)
+   - ✅ 7번 같은 멀티파트(parts 2개 이상): 한 문제 화면에서 "합쳐서" 전부 표시
 */
 
 const $ = (sel) => document.querySelector(sel);
@@ -14,7 +16,6 @@ const SCREENS = {
 
 const state = {
   subject: null,
-
   bank: [],
 
   // ✅ 분리 데이터(정답/해설)
@@ -28,6 +29,9 @@ const state = {
 
   timerStart: null,
   timerHandle: null,
+
+  // ✅ 이미지 원본 크기 캐시
+  _imgSizeCache: {},  // { [src]: {w,h} }
 };
 
 function showScreen(name){
@@ -176,93 +180,177 @@ function showExplainPanel(q){
   p.classList.remove("hidden");
 }
 
-/** crop 렌더링 */
+/* =========================
+   ✅ Crop Utils (픽셀 crop)
+   ========================= */
+
+// src 이미지의 natural size를 캐시로 가져오기
+function getImageSize(src){
+  const cached = state._imgSizeCache[src];
+  if(cached) return Promise.resolve(cached);
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const size = { w: img.naturalWidth || 1, h: img.naturalHeight || 1 };
+      state._imgSizeCache[src] = size;
+      resolve(size);
+    };
+    img.onerror = () => {
+      const size = { w: 1, h: 1 };
+      state._imgSizeCache[src] = size;
+      resolve(size);
+    };
+    img.src = src;
+  });
+}
+
+// crop 데이터가 0~1(normalized)이면 px로 변환, px면 그대로
+function normalizeCropToPx(crop, imgW, imgH){
+  if(!crop || typeof crop.x !== "number") return null;
+
+  const c = crop;
+  const isNormalized =
+    c.x >= 0 && c.x <= 1 &&
+    c.y >= 0 && c.y <= 1 &&
+    c.w > 0 && c.w <= 1 &&
+    c.h > 0 && c.h <= 1;
+
+  if(isNormalized){
+    return {
+      x: c.x * imgW,
+      y: c.y * imgH,
+      w: c.w * imgW,
+      h: c.h * imgH,
+    };
+  }
+  return { x: c.x, y: c.y, w: c.w, h: c.h };
+}
+
+// box 안에 img를 "정확한 픽셀 crop"으로 맞춰서 배치
+async function applyCropPx(box, imgEl, src, crop){
+  const { w: imgW, h: imgH } = await getImageSize(src);
+  const c = normalizeCropToPx(crop, imgW, imgH);
+  if(!c) return;
+
+  // box 폭에 맞춰 crop 영역을 꽉 채우는 스케일
+  const boxW = box.clientWidth || 1;
+  const scale = boxW / Math.max(1, c.w);
+
+  // 높이 = crop.h * scale 로 "정확히" 맞춤
+  const boxH = Math.max(1, Math.round(c.h * scale));
+  box.style.height = boxH + "px";
+
+  // imgEl을 확대/이동
+  imgEl.style.position = "absolute";
+  imgEl.style.left = (-c.x * scale) + "px";
+  imgEl.style.top  = (-c.y * scale) + "px";
+  imgEl.style.width  = (imgW * scale) + "px";
+  imgEl.style.height = (imgH * scale) + "px";
+  imgEl.style.objectFit = "fill"; // 위치/크기 직접 지정이므로 영향 거의 없음
+}
+
+// 현재 화면의 모든 crop 다시 적용(리사이즈 대응)
+function reapplyAllCrops(){
+  document.querySelectorAll(".crop-box[data-crop]").forEach(async (box) => {
+    const imgEl = box.querySelector("img.crop-img-el");
+    if(!imgEl) return;
+
+    const src = box.dataset.src || imgEl.src;
+    let crop;
+    try{ crop = JSON.parse(box.dataset.crop || "null"); }catch(e){ crop = null; }
+    if(!crop) return;
+
+    await applyCropPx(box, imgEl, src, crop);
+  });
+}
+
+/** =========================
+    ✅ Question Render
+    ========================= */
 function renderQuestion(){
   const q = state.quizItems[state.idx];
   if(!q) return;
 
-  $("#qNo").textContent = `${q.no}번`;
-  $("#qStatus").textContent = "풀이";
-  $("#qMeta").textContent = `${q.subject} / ${q.session}회`;
-  $("#progressText").textContent = `${state.idx + 1}/${state.quizItems.length}`;
+  const qNo = $("#qNo");
+  const qStatus = $("#qStatus");
+  const qMeta = $("#qMeta");
+  const progress = $("#progressText");
+
+  if(qNo) qNo.textContent = `${q.no}번`;
+  if(qStatus) qStatus.textContent = "풀이";
+  if(qMeta) qMeta.textContent = `${q.subject} / ${q.session}회`;
+  if(progress) progress.textContent = `${state.idx + 1}/${state.quizItems.length}`;
 
   // 문제 바뀌면 해설은 접기(채점 누르면 다시 열림)
   hideExplainPanel();
 
-  // 이미지 스택
+  // ✅ 멀티파트(parts>=2): 한 화면에 전부 "합쳐서" 표시 (세로 스택)
   const stack = $("#qImageStack");
+  if(!stack) return;
   stack.innerHTML = "";
 
-    const parts = Array.isArray(q.parts) && q.parts.length ? q.parts : [];
+  const parts = Array.isArray(q.parts) && q.parts.length ? q.parts : [];
+  const multi = parts.length >= 2;
+
+  // (있다면) 파트 네비 UI는 멀티/싱글 모두 숨김(합쳐 보기 기준)
+  const nav = $("#partNav");
+  if(nav){
+    nav.style.display = "none";
+    const pt = $("#partText");
+    if(pt) pt.textContent = "";
+  }
+
   parts.forEach((p, pidx) => {
     const card = document.createElement("div");
     card.className = "crop-card";
 
     const box = document.createElement("div");
     box.className = "crop-box";
+    box.style.position = "relative";
+    box.style.overflow = "hidden";
+    box.style.background = "#fff";
 
     const img = document.createElement("img");
     img.className = "crop-img-el";
     img.alt = `${q.no}번 part ${pidx+1}`;
     img.src = p.pageImage;
 
-    // ✅ crop이 있으면: 픽셀 기준으로 정확히 잘라서 보이게
-    if (p.crop && typeof p.crop.x === "number") {
-      // crop 데이터 저장(리사이즈 대응)
+    // ✅ crop 적용(픽셀 기반, normalized도 지원)
+    if(p.crop && typeof p.crop.x === "number"){
       box.dataset.crop = JSON.stringify(p.crop);
+      box.dataset.src = p.pageImage;
 
-      img.addEventListener("load", () => {
-        applyCrop(box, img);
+      // 이미지 로드 후 crop 적용
+      img.addEventListener("load", async () => {
+        await applyCropPx(box, img, p.pageImage, p.crop);
       });
-    } else {
-      // crop 미설정: 전체 이미지(contain 느낌)
-      img.style.position = "relative";
+    }else{
+      // crop 미설정: 전체 이미지(contain)
+      box.style.height = "56vw";
+      box.style.maxHeight = "520px";
+      img.style.position = "absolute";
+      img.style.inset = "0";
       img.style.width = "100%";
       img.style.height = "100%";
       img.style.objectFit = "contain";
+      img.style.background = "#fff";
     }
 
     box.appendChild(img);
 
     const note = document.createElement("div");
     note.className = "crop-note";
-    note.textContent = p.crop ? `part ${pidx+1} / crop 적용` : `part ${pidx+1} / crop 미설정(전체 페이지 표시)`;
+    if(multi){
+      note.textContent = `part ${pidx+1}/${parts.length} (합쳐보기)`;
+    }else{
+      note.textContent = p.crop ? `crop 적용` : `crop 미설정(전체 페이지 표시)`;
+    }
 
     card.appendChild(box);
     card.appendChild(note);
     stack.appendChild(card);
   });
-
-   function applyCrop(box, img){
-  const crop = JSON.parse(box.dataset.crop || "null");
-  if(!crop) return;
-
-  // box 실제 폭 기준으로 스케일 계산
-  const boxW = box.clientWidth || 1;
-  const scale = boxW / crop.w;
-
-  // 이미지 원본 크기
-  const iw = img.naturalWidth || 1;
-  const ih = img.naturalHeight || 1;
-
-  // crop 영역이 box에 꽉 차도록: 이미지 자체를 확대/이동
-  img.style.position = "absolute";
-  img.style.left = (-crop.x * scale) + "px";
-  img.style.top  = (-crop.y * scale) + "px";
-  img.style.width  = (iw * scale) + "px";
-  img.style.height = (ih * scale) + "px";
-}
-
-function reapplyAllCrops(){
-  document.querySelectorAll(".crop-box").forEach(box=>{
-    const img = box.querySelector("img.crop-img-el");
-    if(!img) return;
-    if(box.dataset.crop){
-      applyCrop(box, img);
-    }
-  });
-}
-
 
   // 선택 표시
   const selected = state.answers[q.id] ?? null;
@@ -327,19 +415,21 @@ function resetAll(){
 }
 
 function openSheet(){
-  $("#sheet").classList.remove("hidden");
+  const s = $("#sheet");
+  if(s) s.classList.remove("hidden");
 }
 function closeSheet(){
-  $("#sheet").classList.add("hidden");
+  const s = $("#sheet");
+  if(s) s.classList.add("hidden");
 }
 
 async function init(){
   showScreen("home");
 
-   window.addEventListener("resize", () => {
-  reapplyAllCrops();
-});
-
+  // ✅ 리사이즈 시 crop 재적용
+  window.addEventListener("resize", () => {
+    reapplyAllCrops();
+  });
 
   // 1) bank 로드(필수)
   try{
@@ -361,24 +451,32 @@ async function init(){
       state.subject = subj;
 
       const total = state.bank.filter(q => q.subject === subj).length;
-      $("#pickTitle").textContent = `${subj} 선택`;
-      $("#pickHint").textContent = `총 ${total}문항 중 랜덤 출제`;
-      $("#countInput").value = Math.min(20, total || 20);
-      $("#countInput").max = total || 999;
+      const title = $("#pickTitle");
+      const hint = $("#pickHint");
+      const count = $("#countInput");
+
+      if(title) title.textContent = `${subj} 선택`;
+      if(hint) hint.textContent = `총 ${total}문항 중 랜덤 출제`;
+      if(count){
+        count.value = Math.min(20, total || 20);
+        count.max = total || 999;
+      }
 
       showScreen("pick");
-      setTimeout(()=>$("#countInput").focus(), 50);
+      setTimeout(()=>{ if(count) count.focus(); }, 50);
     });
   });
 
-  $("#btnBackHome").addEventListener("click", () => showScreen("home"));
+  const btnBackHome = $("#btnBackHome");
+  if(btnBackHome) btnBackHome.addEventListener("click", () => showScreen("home"));
 
   // 시작
-  $("#btnStart").addEventListener("click", () => {
+  const btnStart = $("#btnStart");
+  if(btnStart) btnStart.addEventListener("click", () => {
     if(!state.subject) return;
 
     const total = state.bank.filter(q => q.subject === state.subject).length;
-    const n = Math.max(1, Math.min(Number($("#countInput").value || 1), total || 1));
+    const n = Math.max(1, Math.min(Number($("#countInput")?.value || 1), total || 1));
 
     state.quizItems = pickQuestions(state.subject, n);
     state.idx = 0;
@@ -403,10 +501,12 @@ async function init(){
   });
 
   // 다음
-  $("#btnNext").addEventListener("click", nextQuestion);
+  const btnNext = $("#btnNext");
+  if(btnNext) btnNext.addEventListener("click", nextQuestion);
 
   // 채점
-  $("#btnGrade").addEventListener("click", () => {
+  const btnGrade = $("#btnGrade");
+  if(btnGrade) btnGrade.addEventListener("click", () => {
     const q = state.quizItems[state.idx];
     if(!q) return;
     state.graded[q.id] = true;
@@ -420,20 +520,29 @@ async function init(){
   }
 
   // 나가기(홈으로)
-  $("#btnExit").addEventListener("click", () => {
+  const btnExit = $("#btnExit");
+  if(btnExit) btnExit.addEventListener("click", () => {
     if(confirm("나가면 풀이 기록이 초기화됩니다. 나갈까요?")){
       resetAll();
     }
   });
 
   // 메뉴
-  $("#btnMenu").addEventListener("click", openSheet);
-  $("#btnCloseSheet").addEventListener("click", closeSheet);
-  $("#sheet").addEventListener("click", (e) => {
-    if(e.target.id === "sheet") closeSheet();
-  });
+  const btnMenu = $("#btnMenu");
+  if(btnMenu) btnMenu.addEventListener("click", openSheet);
 
-  $("#btnReset").addEventListener("click", () => {
+  const btnCloseSheet = $("#btnCloseSheet");
+  if(btnCloseSheet) btnCloseSheet.addEventListener("click", closeSheet);
+
+  const sheet = $("#sheet");
+  if(sheet){
+    sheet.addEventListener("click", (e) => {
+      if(e.target.id === "sheet") closeSheet();
+    });
+  }
+
+  const btnReset = $("#btnReset");
+  if(btnReset) btnReset.addEventListener("click", () => {
     closeSheet();
     if(confirm("처음부터 다시 시작할까요?")){
       resetAll();
