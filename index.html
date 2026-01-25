@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>랜덤 기출 퀴즈</title>
+  <link rel="stylesheet" href="styles.css?v=1" />
+</head>
+<body>
+
+  <!-- Topbar (시험 화면에서만 표시) -->
+  <header class="topbar" id="topbar" hidden>
+    <div class="topbar-left">
+      <button class="icon-btn" id="btnExit" aria-label="Exit">✕</button>
+      <button class="icon-btn" id="btnMore" aria-label="More">⋯</button>
+    </div>
+
+    <div class="topbar-mid">
+      <div class="timer-pill">
+        <span id="timerText">00:00:00</span>
+        <button class="pause-btn" id="btnPause" aria-label="Pause">⏸</button>
+      </div>
+    </div>
+
+    <div class="topbar-right">
+      <button class="primary-btn" id="btnGrade">채점</button>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <main class="main">
+    <!-- Start Screen -->
+    <section id="startScreen" class="start">
+      <h1 class="brand-title">기출 랜덤 문제</h1>
+      <p class="brand-sub">과목 선택 → 랜덤 문항수 선택 → 바로 풀이</p>
+
+      <div class="card">
+        <div class="card-title">과목 선택</div>
+        <div class="subject-grid" id="subjectGrid"></div>
+      </div>
+
+      <div class="footnote">
+        * 데이터는 <code>data/bank.json</code>에서 불러옵니다.
+      </div>
+    </section>
+
+    <!-- Quiz Screen -->
+    <section id="quizScreen" class="quiz" hidden>
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab active" data-tab="question" id="tabQuestion">문제</button>
+        <button class="tab" data-tab="explain" id="tabExplain" disabled>해설</button>
+        <button class="tab" data-tab="answer" id="tabAnswer" disabled>정답</button>
+      </div>
+
+      <!-- Content -->
+      <div class="paper">
+        <div class="q-meta">
+          <span id="qNoText">1번</span>
+          <span class="dot">•</span>
+          <span id="qInfoText">재무회계 · 10회</span>
+        </div>
+
+        <div id="qBody" class="q-body">
+          <!-- 여기서 parts[] 크롭 이미지 또는 텍스트를 렌더링 -->
+        </div>
+
+        <div id="qExplain" class="q-explain" hidden></div>
+        <div id="qAnswer" class="q-answer" hidden></div>
+      </div>
+
+      <!-- Bottom -->
+      <div class="bottom">
+        <div class="progress">
+          <span id="progressText">1 / 10</span>
+        </div>
+
+        <div class="choice-row">
+          <button class="choice-btn" data-choice="1">1</button>
+          <button class="choice-btn" data-choice="2">2</button>
+          <button class="choice-btn" data-choice="3">3</button>
+          <button class="choice-btn" data-choice="4">4</button>
+        </div>
+
+        <div class="nav-row">
+          <button class="ghost-btn" id="btnPrev">◀</button>
+          <button class="ghost-btn" id="btnNext">▶</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal: question count -->
+  <div class="modal-backdrop" id="modalBackdrop" hidden>
+    <div class="modal">
+      <div class="modal-title">랜덤 문항수</div>
+      <div class="modal-sub" id="modalSub">선택한 과목: -</div>
+
+      <div class="modal-field">
+        <label for="countInput">몇 문제를 풀까요?</label>
+        <input id="countInput" type="number" min="1" step="1" placeholder="예: 20" />
+        <div class="hint" id="countHint">최대: -</div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="ghost-btn" id="btnCancel">취소</button>
+        <button class="primary-btn" id="btnStart">시작</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js?v=1"></script>
+</body>
+</html>
