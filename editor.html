@@ -91,12 +91,15 @@
         <span class="tag">드래그로 영역 선택</span>
         <span class="tag">✅ 0~1 좌표(정규화) 저장</span>
         <span class="tag">iPad 터치 지원</span>
+        <span class="tag">Shift=정사각형</span>
+        <span class="tag">Alt=가운데 기준</span>
       </div>
 
       <div class="hint">
         1) 이미지 경로 입력 → 불러오기<br/>
-        2) 문제 영역 드래그<br/>
-        3) 아래 JSON을 <b>bank.json의 해당 parts[n]</b>에 그대로 복붙
+        2) 문제 영역 드래그(터치 가능)<br/>
+        3) 아래 JSON을 <b>bank.json의 해당 parts[n]</b>에 그대로 복붙<br/>
+        <span style="color:#444;"><b>팁:</b> 좌표가 어긋나면 우측 JSON이 0~1인지(정규화) 먼저 확인하세요.</span>
       </div>
 
       <div class="kv">
@@ -110,6 +113,7 @@
 
       <div class="btnline">
         <button id="btnCopy">JSON 복사</button>
+        <button id="btnCopyCrop">crop만 복사</button>
       </div>
 
       <textarea id="out" placeholder="결과 JSON"></textarea>
@@ -134,6 +138,7 @@ img.crossOrigin = "anonymous";
 let imgW=0, imgH=0;
 
 let dragging=false, sx=0, sy=0, ex=0, ey=0;
+let lastCrop = null; // {x,y,w,h} (0~1)
 
 function setInfo(pxText, normText){
   selPxEl.textContent = pxText || "-";
@@ -150,12 +155,43 @@ function clientToCanvasXY(clientX, clientY){
   return {x, y};
 }
 
+function calcRectWithModifiers(p1, p2, mods){
+  let x1 = p1.x, y1 = p1.y;
+  let x2 = p2.x, y2 = p2.y;
+
+  let w = x2 - x1;
+  let h = y2 - y1;
+
+  // Alt: center-based scaling
+  if(mods.alt){
+    x1 = p1.x - w;
+    y1 = p1.y - h;
+    x2 = p1.x + w;
+    y2 = p1.y + h;
+    w = x2 - x1;
+    h = y2 - y1;
+  }
+
+  // Shift: square
+  if(mods.shift){
+    const size = Math.max(Math.abs(w), Math.abs(h));
+    const sx = Math.sign(w) || 1;
+    const sy = Math.sign(h) || 1;
+    x2 = x1 + size * sx;
+    y2 = y1 + size * sy;
+  }
+
+  return {x1, y1, x2, y2};
+}
+
 // ✅ 선택 박스 화면 표시(스크롤/리사이즈 대응)
-function updateBox(){
-  const x1 = Math.min(sx, ex);
-  const y1 = Math.min(sy, ey);
-  const x2 = Math.max(sx, ex);
-  const y2 = Math.max(sy, ey);
+function updateBox(mods={shift:false,alt:false}){
+  const r = calcRectWithModifiers({x:sx,y:sy},{x:ex,y:ey},mods);
+
+  const x1 = Math.min(r.x1, r.x2);
+  const y1 = Math.min(r.y1, r.y2);
+  const x2 = Math.max(r.x1, r.x2);
+  const y2 = Math.max(r.y1, r.y2);
 
   const rect = cv.getBoundingClientRect();
   const stageRect = stage.getBoundingClientRect();
@@ -174,10 +210,10 @@ function updateBox(){
 
   // 실시간 값 표시
   if(imgW && imgH){
-    const cx1 = clamp(Math.min(sx, ex), 0, imgW);
-    const cy1 = clamp(Math.min(sy, ey), 0, imgH);
-    const cx2 = clamp(Math.max(sx, ex), 0, imgW);
-    const cy2 = clamp(Math.max(sy, ey), 0, imgH);
+    const cx1 = clamp(x1, 0, imgW);
+    const cy1 = clamp(y1, 0, imgH);
+    const cx2 = clamp(x2, 0, imgW);
+    const cy2 = clamp(y2, 0, imgH);
     const w = Math.max(1, cx2 - cx1);
     const h = Math.max(1, cy2 - cy1);
 
@@ -191,6 +227,17 @@ function updateBox(){
       `x:${nx} y:${ny} w:${nw} h:${nh}`
     );
   }
+}
+
+function buildJson(){
+  const src = imgPath.value.trim();
+  if(!src || !lastCrop) return "";
+  return JSON.stringify({ pageImage: src, crop: lastCrop }, null, 2);
+}
+
+function buildCropOnly(){
+  if(!lastCrop) return "";
+  return JSON.stringify(lastCrop, null, 2);
 }
 
 document.getElementById('btnLoad').onclick = () => {
@@ -210,6 +257,7 @@ document.getElementById('btnLoad').onclick = () => {
 
     box.hidden = true;
     out.value = '';
+    lastCrop = null;
     setInfo("-", "-");
   };
   img.onerror = () => alert('이미지를 불러오지 못했습니다. 경로/파일명을 확인하세요.');
@@ -219,6 +267,7 @@ document.getElementById('btnLoad').onclick = () => {
 document.getElementById('btnClear').onclick = () => {
   box.hidden = true;
   out.value = '';
+  lastCrop = null;
   setInfo("-", "-");
 };
 
@@ -228,6 +277,17 @@ document.getElementById('btnCopy').onclick = async () => {
   try{
     await navigator.clipboard.writeText(text);
     alert('복사 완료!');
+  }catch(e){
+    alert('복사 실패. 텍스트를 직접 선택해서 복사해주세요.');
+  }
+};
+
+document.getElementById('btnCopyCrop').onclick = async () => {
+  const text = buildCropOnly().trim();
+  if(!text) return alert('복사할 crop이 없습니다. 먼저 영역을 선택하세요.');
+  try{
+    await navigator.clipboard.writeText(text);
+    alert('crop만 복사 완료!');
   }catch(e){
     alert('복사 실패. 텍스트를 직접 선택해서 복사해주세요.');
   }
@@ -244,7 +304,7 @@ cv.addEventListener('pointerdown', (e) => {
   sx = p.x; sy = p.y; ex = p.x; ey = p.y;
 
   box.hidden = false;
-  updateBox();
+  updateBox({shift:e.shiftKey, alt:e.altKey});
 });
 
 cv.addEventListener('pointermove', (e) => {
@@ -252,7 +312,7 @@ cv.addEventListener('pointermove', (e) => {
   e.preventDefault();
   const p = clientToCanvasXY(e.clientX, e.clientY);
   ex = p.x; ey = p.y;
-  updateBox();
+  updateBox({shift:e.shiftKey, alt:e.altKey});
 });
 
 cv.addEventListener('pointerup', (e) => {
@@ -260,10 +320,12 @@ cv.addEventListener('pointerup', (e) => {
   e.preventDefault();
   dragging = false;
 
-  const x1 = clamp(Math.min(sx, ex), 0, imgW);
-  const y1 = clamp(Math.min(sy, ey), 0, imgH);
-  const x2 = clamp(Math.max(sx, ex), 0, imgW);
-  const y2 = clamp(Math.max(sy, ey), 0, imgH);
+  const r = calcRectWithModifiers({x:sx,y:sy},{x:ex,y:ey},{shift:e.shiftKey, alt:e.altKey});
+
+  const x1 = clamp(Math.min(r.x1, r.x2), 0, imgW);
+  const y1 = clamp(Math.min(r.y1, r.y2), 0, imgH);
+  const x2 = clamp(Math.max(r.x1, r.x2), 0, imgW);
+  const y2 = clamp(Math.max(r.y1, r.y2), 0, imgH);
 
   const w = Math.max(1, x2 - x1);
   const h = Math.max(1, y2 - y1);
@@ -274,20 +336,22 @@ cv.addEventListener('pointerup', (e) => {
   const nw = +(w  / imgW).toFixed(4);
   const nh = +(h  / imgH).toFixed(4);
 
-  const src = imgPath.value.trim();
-  const json = {
-    pageImage: src,
-    crop: { x: nx, y: ny, w: nw, h: nh }
-  };
+  lastCrop = { x: nx, y: ny, w: nw, h: nh };
 
-  out.value = JSON.stringify(json, null, 2);
+  out.value = buildJson();
 });
 
+// 선택 박스 위치 갱신
 window.addEventListener('resize', () => {
   if(!box.hidden) updateBox();
 });
 stage.addEventListener('scroll', () => {
   if(!box.hidden) updateBox();
+});
+
+// ✅ Enter로 불러오기
+imgPath.addEventListener('keydown', (e) => {
+  if(e.key === 'Enter') document.getElementById('btnLoad').click();
 });
 </script>
 </body>
