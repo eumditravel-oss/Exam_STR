@@ -12,7 +12,7 @@
       border-bottom:1px solid rgba(0,0,0,.08);
       padding:10px 12px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;
     }
-    input, button{
+    input, button, select{
       height:36px; border-radius:10px; border:1px solid rgba(0,0,0,.12);
       padding:0 10px; background:#fff;
     }
@@ -42,7 +42,7 @@
 
     .panel{ background:#fff; border:1px solid rgba(0,0,0,.08); border-radius:14px; padding:12px; }
     textarea{
-      width:100%; height:340px;
+      width:100%; height:360px;
       border-radius:12px; border:1px solid rgba(0,0,0,.12);
       padding:10px;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -68,6 +68,7 @@
     .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
     .btnline{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
     .btnline button{ flex:1; min-width: 120px; }
+    .small{ font-size:12px; color:#777; }
   </style>
 </head>
 <body>
@@ -77,6 +78,11 @@
     placeholder='예: assets/pages/재무회계/10회/10회_재무회계_01.jpg' />
   <button id="btnLoad">불러오기</button>
   <button id="btnClear">지우기</button>
+
+  <select id="mode">
+    <option value="norm">0~1 정규화</option>
+    <option value="px">픽셀(px)</option>
+  </select>
 </header>
 
 <main>
@@ -89,17 +95,15 @@
     <div class="panel">
       <div class="row">
         <span class="tag">드래그로 영역 선택</span>
-        <span class="tag">✅ 0~1 좌표(정규화) 저장</span>
+        <span class="tag">✅ 0~1 / px 모두 출력</span>
         <span class="tag">iPad 터치 지원</span>
-        <span class="tag">Shift=정사각형</span>
-        <span class="tag">Alt=가운데 기준</span>
       </div>
 
       <div class="hint">
         1) 이미지 경로 입력 → 불러오기<br/>
-        2) 문제 영역 드래그(터치 가능)<br/>
+        2) 문제 영역 드래그<br/>
         3) 아래 JSON을 <b>bank.json의 해당 parts[n]</b>에 그대로 복붙<br/>
-        <span style="color:#444;"><b>팁:</b> 좌표가 어긋나면 우측 JSON이 0~1인지(정규화) 먼저 확인하세요.</span>
+        <span class="small">※ app.js는 px/정규화 둘 다 자동 인식</span>
       </div>
 
       <div class="kv">
@@ -113,7 +117,6 @@
 
       <div class="btnline">
         <button id="btnCopy">JSON 복사</button>
-        <button id="btnCopyCrop">crop만 복사</button>
       </div>
 
       <textarea id="out" placeholder="결과 JSON"></textarea>
@@ -128,6 +131,7 @@ const stage = document.getElementById('stage');
 const box = document.getElementById('box');
 const imgPath = document.getElementById('imgPath');
 const out = document.getElementById('out');
+const modeSel = document.getElementById('mode');
 
 const imgSizeEl = document.getElementById('imgSize');
 const selPxEl = document.getElementById('selPx');
@@ -138,7 +142,9 @@ img.crossOrigin = "anonymous";
 let imgW=0, imgH=0;
 
 let dragging=false, sx=0, sy=0, ex=0, ey=0;
-let lastCrop = null; // {x,y,w,h} (0~1)
+
+let lastCropPx = null;   // {x,y,w,h} in px
+let lastCropNorm = null; // {x,y,w,h} in 0~1
 
 function setInfo(pxText, normText){
   selPxEl.textContent = pxText || "-";
@@ -147,7 +153,7 @@ function setInfo(pxText, normText){
 
 function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
 
-// ✅ stage scroll 고려해서 "캔버스 좌표"로 변환
+// 캔버스 좌표 변환
 function clientToCanvasXY(clientX, clientY){
   const rect = cv.getBoundingClientRect();
   const x = (clientX - rect.left) * (cv.width / rect.width);
@@ -155,43 +161,12 @@ function clientToCanvasXY(clientX, clientY){
   return {x, y};
 }
 
-function calcRectWithModifiers(p1, p2, mods){
-  let x1 = p1.x, y1 = p1.y;
-  let x2 = p2.x, y2 = p2.y;
-
-  let w = x2 - x1;
-  let h = y2 - y1;
-
-  // Alt: center-based scaling
-  if(mods.alt){
-    x1 = p1.x - w;
-    y1 = p1.y - h;
-    x2 = p1.x + w;
-    y2 = p1.y + h;
-    w = x2 - x1;
-    h = y2 - y1;
-  }
-
-  // Shift: square
-  if(mods.shift){
-    const size = Math.max(Math.abs(w), Math.abs(h));
-    const sx = Math.sign(w) || 1;
-    const sy = Math.sign(h) || 1;
-    x2 = x1 + size * sx;
-    y2 = y1 + size * sy;
-  }
-
-  return {x1, y1, x2, y2};
-}
-
-// ✅ 선택 박스 화면 표시(스크롤/리사이즈 대응)
-function updateBox(mods={shift:false,alt:false}){
-  const r = calcRectWithModifiers({x:sx,y:sy},{x:ex,y:ey},mods);
-
-  const x1 = Math.min(r.x1, r.x2);
-  const y1 = Math.min(r.y1, r.y2);
-  const x2 = Math.max(r.x1, r.x2);
-  const y2 = Math.max(r.y1, r.y2);
+// 선택 박스 표시
+function updateBox(){
+  const x1 = Math.min(sx, ex);
+  const y1 = Math.min(sy, ey);
+  const x2 = Math.max(sx, ex);
+  const y2 = Math.max(sy, ey);
 
   const rect = cv.getBoundingClientRect();
   const stageRect = stage.getBoundingClientRect();
@@ -199,7 +174,6 @@ function updateBox(mods={shift:false,alt:false}){
   const scaleX = rect.width / cv.width;
   const scaleY = rect.height / cv.height;
 
-  // stage 안에서의 위치로 변환
   const left = (rect.left - stageRect.left) + stage.scrollLeft + x1*scaleX;
   const top  = (rect.top  - stageRect.top ) + stage.scrollTop  + y1*scaleY;
 
@@ -208,12 +182,11 @@ function updateBox(mods={shift:false,alt:false}){
   box.style.width  = ((x2-x1)*scaleX) + 'px';
   box.style.height = ((y2-y1)*scaleY) + 'px';
 
-  // 실시간 값 표시
   if(imgW && imgH){
-    const cx1 = clamp(x1, 0, imgW);
-    const cy1 = clamp(y1, 0, imgH);
-    const cx2 = clamp(x2, 0, imgW);
-    const cy2 = clamp(y2, 0, imgH);
+    const cx1 = clamp(Math.min(sx, ex), 0, imgW);
+    const cy1 = clamp(Math.min(sy, ey), 0, imgH);
+    const cx2 = clamp(Math.max(sx, ex), 0, imgW);
+    const cy2 = clamp(Math.max(sy, ey), 0, imgH);
     const w = Math.max(1, cx2 - cx1);
     const h = Math.max(1, cy2 - cy1);
 
@@ -222,22 +195,31 @@ function updateBox(mods={shift:false,alt:false}){
     const nw = +(w  / imgW).toFixed(4);
     const nh = +(h  / imgH).toFixed(4);
 
+    lastCropPx = { x: Math.round(cx1), y: Math.round(cy1), w: Math.round(w), h: Math.round(h) };
+    lastCropNorm = { x: nx, y: ny, w: nw, h: nh };
+
     setInfo(
-      `x:${Math.round(cx1)} y:${Math.round(cy1)} w:${Math.round(w)} h:${Math.round(h)}`,
-      `x:${nx} y:${ny} w:${nw} h:${nh}`
+      `x:${lastCropPx.x} y:${lastCropPx.y} w:${lastCropPx.w} h:${lastCropPx.h}`,
+      `x:${lastCropNorm.x} y:${lastCropNorm.y} w:${lastCropNorm.w} h:${lastCropNorm.h}`
     );
   }
 }
 
 function buildJson(){
   const src = imgPath.value.trim();
-  if(!src || !lastCrop) return "";
-  return JSON.stringify({ pageImage: src, crop: lastCrop }, null, 2);
+  if(!src || !lastCropPx || !lastCropNorm) return "";
+
+  const use = modeSel.value === "px" ? lastCropPx : lastCropNorm;
+
+  const json = {
+    pageImage: src,
+    crop: use
+  };
+  return JSON.stringify(json, null, 2);
 }
 
-function buildCropOnly(){
-  if(!lastCrop) return "";
-  return JSON.stringify(lastCrop, null, 2);
+function refreshOut(){
+  out.value = buildJson();
 }
 
 document.getElementById('btnLoad').onclick = () => {
@@ -257,7 +239,8 @@ document.getElementById('btnLoad').onclick = () => {
 
     box.hidden = true;
     out.value = '';
-    lastCrop = null;
+    lastCropPx = null;
+    lastCropNorm = null;
     setInfo("-", "-");
   };
   img.onerror = () => alert('이미지를 불러오지 못했습니다. 경로/파일명을 확인하세요.');
@@ -267,7 +250,8 @@ document.getElementById('btnLoad').onclick = () => {
 document.getElementById('btnClear').onclick = () => {
   box.hidden = true;
   out.value = '';
-  lastCrop = null;
+  lastCropPx = null;
+  lastCropNorm = null;
   setInfo("-", "-");
 };
 
@@ -282,18 +266,9 @@ document.getElementById('btnCopy').onclick = async () => {
   }
 };
 
-document.getElementById('btnCopyCrop').onclick = async () => {
-  const text = buildCropOnly().trim();
-  if(!text) return alert('복사할 crop이 없습니다. 먼저 영역을 선택하세요.');
-  try{
-    await navigator.clipboard.writeText(text);
-    alert('crop만 복사 완료!');
-  }catch(e){
-    alert('복사 실패. 텍스트를 직접 선택해서 복사해주세요.');
-  }
-};
+modeSel.addEventListener("change", refreshOut);
 
-// ✅ 포인터 이벤트(마우스+터치 통합)
+// 포인터 이벤트(마우스+터치)
 cv.addEventListener('pointerdown', (e) => {
   if(!imgW) return;
   e.preventDefault();
@@ -304,7 +279,7 @@ cv.addEventListener('pointerdown', (e) => {
   sx = p.x; sy = p.y; ex = p.x; ey = p.y;
 
   box.hidden = false;
-  updateBox({shift:e.shiftKey, alt:e.altKey});
+  updateBox();
 });
 
 cv.addEventListener('pointermove', (e) => {
@@ -312,7 +287,7 @@ cv.addEventListener('pointermove', (e) => {
   e.preventDefault();
   const p = clientToCanvasXY(e.clientX, e.clientY);
   ex = p.x; ey = p.y;
-  updateBox({shift:e.shiftKey, alt:e.altKey});
+  updateBox();
 });
 
 cv.addEventListener('pointerup', (e) => {
@@ -320,38 +295,16 @@ cv.addEventListener('pointerup', (e) => {
   e.preventDefault();
   dragging = false;
 
-  const r = calcRectWithModifiers({x:sx,y:sy},{x:ex,y:ey},{shift:e.shiftKey, alt:e.altKey});
-
-  const x1 = clamp(Math.min(r.x1, r.x2), 0, imgW);
-  const y1 = clamp(Math.min(r.y1, r.y2), 0, imgH);
-  const x2 = clamp(Math.max(r.x1, r.x2), 0, imgW);
-  const y2 = clamp(Math.max(r.y1, r.y2), 0, imgH);
-
-  const w = Math.max(1, x2 - x1);
-  const h = Math.max(1, y2 - y1);
-
-  // ✅ 0~1 정규화(앱 crop 계산과 호환)
-  const nx = +(x1 / imgW).toFixed(4);
-  const ny = +(y1 / imgH).toFixed(4);
-  const nw = +(w  / imgW).toFixed(4);
-  const nh = +(h  / imgH).toFixed(4);
-
-  lastCrop = { x: nx, y: ny, w: nw, h: nh };
-
-  out.value = buildJson();
+  // 마지막 선택 확정
+  updateBox();
+  refreshOut();
 });
 
-// 선택 박스 위치 갱신
 window.addEventListener('resize', () => {
   if(!box.hidden) updateBox();
 });
 stage.addEventListener('scroll', () => {
   if(!box.hidden) updateBox();
-});
-
-// ✅ Enter로 불러오기
-imgPath.addEventListener('keydown', (e) => {
-  if(e.key === 'Enter') document.getElementById('btnLoad').click();
 });
 </script>
 </body>
