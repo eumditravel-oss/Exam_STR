@@ -1,6 +1,6 @@
-/* app.js - Image-based Quiz (bank.json 기반)
+/* app.js - Image-based Quiz (bank.json + answers.json + explanations.json)
    - 과목 선택 → 랜덤 문항 수 선택 → 풀이 UI
-   - 답안/해설은 현재 null/빈값이어도 동작 (채점 시 안내)
+   - 정답/해설은 분리 파일에서 우선 로드 (없으면 bank.json fallback)
 */
 
 const $ = (sel) => document.querySelector(sel);
@@ -14,11 +14,17 @@ const SCREENS = {
 
 const state = {
   subject: null,
+
   bank: [],
+
+  // ✅ 분리 데이터
+  answerMap: {},      // { [id]: 1~4 }
+  explainMap: {},     // { [id]: "..." }
+
   quizItems: [],
   idx: 0,
-  answers: {},      // { id: 1~4 }
-  graded: {},       // { id: true/false } (채점 버튼 누른 뒤 표시 용)
+  answers: {},        // { id: 1~4 }
+  graded: {},         // { id: true/false }
   timerStart: null,
   timerHandle: null,
 };
@@ -37,12 +43,46 @@ function toast(msg){
   el._t = setTimeout(() => el.classList.add("hidden"), 1600);
 }
 
+// ✅ 안전 로드(없어도 앱 동작)
+async function loadJsonOptional(url){
+  try{
+    const res = await fetch(url + (url.includes("?") ? "&" : "?") + "v=" + Date.now());
+    if(!res.ok) return null;
+    return await res.json();
+  }catch(e){
+    return null;
+  }
+}
+
 async function loadBank(){
-  // GitHub Pages에서 fetch 가능
   const res = await fetch("data/bank.json?v=" + Date.now());
   if(!res.ok) throw new Error("bank.json 로드 실패");
   const data = await res.json();
   state.bank = Array.isArray(data) ? data : [];
+}
+
+async function loadAnswerAndExplain(){
+  // answers.json: { "재무회계-10-001": 3, ... }
+  const a = await loadJsonOptional("data/answers.json");
+  state.answerMap = (a && typeof a === "object" && !Array.isArray(a)) ? a : {};
+
+  // explanations.json: { "재무회계-10-001": "해설...", ... }
+  const e = await loadJsonOptional("data/explanations.json");
+  state.explainMap = (e && typeof e === "object" && !Array.isArray(e)) ? e : {};
+}
+
+// ✅ 정답/해설 getter (분리파일 우선, 없으면 bank.json fallback)
+function getAnswerFor(q){
+  const v = state.answerMap?.[q.id];
+  if(typeof v === "number") return v;
+  // fallback
+  return (typeof q.answer === "number") ? q.answer : null;
+}
+function getExplainFor(q){
+  const v = state.explainMap?.[q.id];
+  if(typeof v === "string") return v;
+  // fallback
+  return (typeof q.explain === "string") ? q.explain : "";
 }
 
 function shuffle(arr){
@@ -83,10 +123,7 @@ function pickQuestions(subject, count){
   return shuffle(all).slice(0, n);
 }
 
-/** crop 렌더링:
- *  - crop이 null이면: 전체 이미지 보여줌(설정 전 상태)
- *  - crop이 {x,y,w,h}면: background-position/size로 자른 영역만 보이게 구현
- */
+/** crop 렌더링 */
 function renderQuestion(){
   const q = state.quizItems[state.idx];
   if(!q) return;
@@ -115,18 +152,13 @@ function renderQuestion(){
     img.style.backgroundImage = `url("${src}")`;
 
     if(p.crop && typeof p.crop.x === "number"){
-      // crop 영역을 박스 전체에 꽉 차게(cover처럼) 보이도록:
-      // background-size는 (1/w, 1/h) 배 확대
       const bx = p.crop.x, by = p.crop.y, bw = p.crop.w, bh = p.crop.h;
       const scaleX = 1 / Math.max(0.0001, bw);
       const scaleY = 1 / Math.max(0.0001, bh);
 
       img.style.backgroundSize = `${scaleX*100}% ${scaleY*100}%`;
       img.style.backgroundPosition = `${(-bx/(bw))*100}% ${(-by/(bh))*100}%`;
-      // 위 계산은 직관적이지만 브라우저마다 느낌이 달 수 있어
-      // 실제로는 editor로 좌표 찍고 확인하면서 미세 보정 가능
     }else{
-      // crop 미설정: 전체 페이지 표시
       img.style.backgroundSize = "contain";
       img.style.backgroundPosition = "center";
       img.style.backgroundColor = "#fff";
@@ -136,11 +168,7 @@ function renderQuestion(){
 
     const note = document.createElement("div");
     note.className = "crop-note";
-    if(p.crop){
-      note.textContent = `part ${pidx+1} / crop 적용`;
-    }else{
-      note.textContent = `part ${pidx+1} / crop 미설정(전체 페이지 표시)`;
-    }
+    note.textContent = p.crop ? `part ${pidx+1} / crop 적용` : `part ${pidx+1} / crop 미설정(전체 페이지 표시)`;
 
     card.appendChild(box);
     card.appendChild(note);
@@ -155,7 +183,7 @@ function renderQuestion(){
     btn.classList.remove("correct","wrong");
   });
 
-  // 채점 표시(정답 데이터 없으면 표시 안 함)
+  // 채점 표시
   if(state.graded[q.id]){
     paintGrade(q);
   }
@@ -163,7 +191,9 @@ function renderQuestion(){
 
 function paintGrade(q){
   const sel = state.answers[q.id] ?? null;
-  const ans = q.answer; // 현재는 null일 수 있음
+
+  // ✅ 분리파일 우선 정답
+  const ans = getAnswerFor(q);
 
   $$("#choiceDots .dot").forEach(btn => {
     const c = Number(btn.dataset.choice);
@@ -181,6 +211,14 @@ function paintGrade(q){
     if(sel === null) toast("선택이 없습니다.");
     else toast(sel === ans ? "정답!" : "오답");
   }
+
+  // ✅ 해설(있으면 표시) - UI에 해설 영역이 있을 때만
+  const exp = getExplainFor(q);
+  const expEl = $("#explainText");
+  if(expEl){
+    expEl.textContent = exp ? exp : "";
+    expEl.classList.toggle("hidden", !exp);
+  }
 }
 
 function nextQuestion(){
@@ -189,7 +227,6 @@ function nextQuestion(){
     renderQuestion();
     return;
   }
-  // 마지막이면 결과 요약(정답 없으면 단순 완료)
   stopTimer();
   toast("끝! (정답/해설 세팅 후 점수화 가능)");
 }
@@ -202,26 +239,30 @@ function resetAll(){
   state.answers = {};
   state.graded = {};
   $("#timerText").textContent = "00:00";
+  const expEl = $("#explainText");
+  if(expEl){
+    expEl.textContent = "";
+    expEl.classList.add("hidden");
+  }
   showScreen("home");
 }
 
-function openSheet(){
-  $("#sheet").classList.remove("hidden");
-}
-function closeSheet(){
-  $("#sheet").classList.add("hidden");
-}
+function openSheet(){ $("#sheet").classList.remove("hidden"); }
+function closeSheet(){ $("#sheet").classList.add("hidden"); }
 
 async function init(){
   showScreen("home");
 
-  // 1) bank 로드
+  // 1) bank 로드(필수)
   try{
     await loadBank();
   }catch(e){
     alert("data/bank.json을 불러오지 못했습니다.\n경로/파일명을 확인하세요.\n\n" + e.message);
     return;
   }
+
+  // 2) answers/explanations 로드(선택)
+  await loadAnswerAndExplain();
 
   // HOME: 과목 선택
   $$(".subject-btn").forEach(btn => {
@@ -231,7 +272,6 @@ async function init(){
 
       state.subject = subj;
 
-      // 해당 과목 총 문항
       const total = state.bank.filter(q => q.subject === subj).length;
       $("#pickTitle").textContent = `${subj} 선택`;
       $("#pickHint").textContent = `총 ${total}문항 중 랜덤 출제`;
@@ -243,9 +283,7 @@ async function init(){
     });
   });
 
-  $("#btnBackHome").addEventListener("click", () => {
-    showScreen("home");
-  });
+  $("#btnBackHome").addEventListener("click", () => showScreen("home"));
 
   // 시작
   $("#btnStart").addEventListener("click", () => {
@@ -258,6 +296,13 @@ async function init(){
     state.idx = 0;
     state.answers = {};
     state.graded = {};
+
+    // 해설영역 초기화
+    const expEl = $("#explainText");
+    if(expEl){
+      expEl.textContent = "";
+      expEl.classList.add("hidden");
+    }
 
     showScreen("quiz");
     startTimer();
@@ -275,10 +320,8 @@ async function init(){
     });
   });
 
-  // 다음
   $("#btnNext").addEventListener("click", nextQuestion);
 
-  // 채점
   $("#btnGrade").addEventListener("click", () => {
     const q = state.quizItems[state.idx];
     if(!q) return;
@@ -286,14 +329,12 @@ async function init(){
     paintGrade(q);
   });
 
-  // 나가기(홈으로)
   $("#btnExit").addEventListener("click", () => {
     if(confirm("나가면 풀이 기록이 초기화됩니다. 나갈까요?")){
       resetAll();
     }
   });
 
-  // 메뉴
   $("#btnMenu").addEventListener("click", openSheet);
   $("#btnCloseSheet").addEventListener("click", closeSheet);
   $("#sheet").addEventListener("click", (e) => {
@@ -307,7 +348,7 @@ async function init(){
     }
   });
 
-  // 키보드(PC 편의)
+  // 키보드(PC)
   window.addEventListener("keydown", (e) => {
     if(SCREENS.quiz.classList.contains("hidden")) return;
 
