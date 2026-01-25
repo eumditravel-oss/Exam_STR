@@ -3,111 +3,109 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>랜덤 기출 퀴즈</title>
+  <title>기출문제 랜덤 풀이</title>
   <link rel="stylesheet" href="styles.css?v=1" />
 </head>
 <body>
+  <!-- HOME -->
+  <section id="home" class="screen">
+    <div class="home-wrap">
+      <div class="home-card">
+        <div class="home-title">기출문제 랜덤 풀이</div>
+        <div class="home-sub">과목 선택 → 랜덤 문항 수 선택 → 풀이</div>
 
-  <!-- Topbar (시험 화면에서만 표시) -->
-  <header class="topbar" id="topbar" hidden>
-    <div class="topbar-left">
-      <button class="icon-btn" id="btnExit" aria-label="Exit">✕</button>
-      <button class="icon-btn" id="btnMore" aria-label="More">⋯</button>
+        <div class="subject-grid">
+          <button class="subject-btn" data-subject="재무회계">1. 재무회계</button>
+          <button class="subject-btn disabled" data-subject="원가관리회계" disabled>2. 원가관리회계 (준비중)</button>
+          <button class="subject-btn disabled" data-subject="제조원가실무" disabled>3. 제조원가실무 (준비중)</button>
+          <button class="subject-btn disabled" data-subject="공사기타원가회계" disabled>4. 공사기타원가회계 (준비중)</button>
+          <button class="subject-btn disabled" data-subject="제도및법규" disabled>5. 제도및법규 (준비중)</button>
+        </div>
+
+        <div class="home-foot">
+          <a class="link" href="editor.html">좌표 찍기 도구 열기(editor.html)</a>
+        </div>
+      </div>
     </div>
+  </section>
 
-    <div class="topbar-mid">
+  <!-- PICK COUNT -->
+  <section id="pick" class="screen hidden">
+    <div class="pick-wrap">
+      <div class="pick-card">
+        <div class="pick-title" id="pickTitle">과목 선택</div>
+        <div class="pick-sub">전체 문제 중 몇 문제를 랜덤으로 풀까요?</div>
+
+        <div class="pick-row">
+          <input id="countInput" type="number" min="1" value="20" />
+          <button id="btnStart" class="btn primary">시작</button>
+        </div>
+
+        <div class="pick-hint" id="pickHint">문항 수를 불러오는 중...</div>
+
+        <div class="pick-actions">
+          <button id="btnBackHome" class="btn">← 과목 다시 선택</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- QUIZ -->
+  <section id="quiz" class="screen hidden">
+    <header class="topbar">
+      <button id="btnExit" class="icon-btn" title="나가기">✕</button>
+      <button id="btnMenu" class="icon-btn" title="메뉴">⋯</button>
+
       <div class="timer-pill">
-        <span id="timerText">00:00:00</span>
-        <button class="pause-btn" id="btnPause" aria-label="Pause">⏸</button>
+        <span id="timerText">00:00</span>
+        <span class="timer-ico" aria-hidden="true">⏱</span>
+      </div>
+
+      <button id="btnGrade" class="grade-btn">채점</button>
+    </header>
+
+    <main class="quiz-main">
+      <div class="q-head">
+        <div class="q-title">
+          <span id="qNo">1번</span>
+          <span class="q-sep">·</span>
+          <span id="qStatus">풀이</span>
+        </div>
+        <div class="q-meta" id="qMeta">재무회계 / 10회</div>
+      </div>
+
+      <div id="qImageStack" class="q-image-stack"></div>
+
+      <div class="spacer"></div>
+    </main>
+
+    <footer class="bottombar">
+      <div class="progress">
+        <span id="progressText">1/20</span>
+      </div>
+
+      <div class="choice-dots" id="choiceDots">
+        <button class="dot" data-choice="1">1</button>
+        <button class="dot" data-choice="2">2</button>
+        <button class="dot" data-choice="3">3</button>
+        <button class="dot" data-choice="4">4</button>
+      </div>
+
+      <button id="btnNext" class="next-btn" title="다음">›</button>
+    </footer>
+
+    <!-- MENU SHEET -->
+    <div id="sheet" class="sheet hidden">
+      <div class="sheet-card">
+        <div class="sheet-title">메뉴</div>
+        <button id="btnReset" class="sheet-item">처음부터 다시</button>
+        <button id="btnCloseSheet" class="sheet-item">닫기</button>
       </div>
     </div>
 
-    <div class="topbar-right">
-      <button class="primary-btn" id="btnGrade">채점</button>
-    </div>
-  </header>
-
-  <!-- Main -->
-  <main class="main">
-    <!-- Start Screen -->
-    <section id="startScreen" class="start">
-      <h1 class="brand-title">기출 랜덤 문제</h1>
-      <p class="brand-sub">과목 선택 → 랜덤 문항수 선택 → 바로 풀이</p>
-
-      <div class="card">
-        <div class="card-title">과목 선택</div>
-        <div class="subject-grid" id="subjectGrid"></div>
-      </div>
-
-      <div class="footnote">
-        * 데이터는 <code>data/bank.json</code>에서 불러옵니다.
-      </div>
-    </section>
-
-    <!-- Quiz Screen -->
-    <section id="quizScreen" class="quiz" hidden>
-      <!-- Tabs -->
-      <div class="tabs">
-        <button class="tab active" data-tab="question" id="tabQuestion">문제</button>
-        <button class="tab" data-tab="explain" id="tabExplain" disabled>해설</button>
-        <button class="tab" data-tab="answer" id="tabAnswer" disabled>정답</button>
-      </div>
-
-      <!-- Content -->
-      <div class="paper">
-        <div class="q-meta">
-          <span id="qNoText">1번</span>
-          <span class="dot">•</span>
-          <span id="qInfoText">재무회계 · 10회</span>
-        </div>
-
-        <div id="qBody" class="q-body">
-          <!-- 여기서 parts[] 크롭 이미지 또는 텍스트를 렌더링 -->
-        </div>
-
-        <div id="qExplain" class="q-explain" hidden></div>
-        <div id="qAnswer" class="q-answer" hidden></div>
-      </div>
-
-      <!-- Bottom -->
-      <div class="bottom">
-        <div class="progress">
-          <span id="progressText">1 / 10</span>
-        </div>
-
-        <div class="choice-row">
-          <button class="choice-btn" data-choice="1">1</button>
-          <button class="choice-btn" data-choice="2">2</button>
-          <button class="choice-btn" data-choice="3">3</button>
-          <button class="choice-btn" data-choice="4">4</button>
-        </div>
-
-        <div class="nav-row">
-          <button class="ghost-btn" id="btnPrev">◀</button>
-          <button class="ghost-btn" id="btnNext">▶</button>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <!-- Modal: question count -->
-  <div class="modal-backdrop" id="modalBackdrop" hidden>
-    <div class="modal">
-      <div class="modal-title">랜덤 문항수</div>
-      <div class="modal-sub" id="modalSub">선택한 과목: -</div>
-
-      <div class="modal-field">
-        <label for="countInput">몇 문제를 풀까요?</label>
-        <input id="countInput" type="number" min="1" step="1" placeholder="예: 20" />
-        <div class="hint" id="countHint">최대: -</div>
-      </div>
-
-      <div class="modal-actions">
-        <button class="ghost-btn" id="btnCancel">취소</button>
-        <button class="primary-btn" id="btnStart">시작</button>
-      </div>
-    </div>
-  </div>
+    <!-- TOAST -->
+    <div id="toast" class="toast hidden"></div>
+  </section>
 
   <script src="app.js?v=1"></script>
 </body>
