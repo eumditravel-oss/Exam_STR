@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>기출문제 랜덤 풀이</title>
-  <link rel="stylesheet" href="styles.css?v=1" />
+  <link rel="stylesheet" href="styles.css?v=2" />
 </head>
 <body>
   <!-- HOME -->
@@ -76,6 +76,29 @@
 
       <div id="qImageStack" class="q-image-stack"></div>
 
+      <!-- ✅ 해설 박스 (채점 시 자동 펼침) -->
+      <section id="explainPanel" class="explain-panel hidden" aria-live="polite">
+        <div class="explain-head">
+          <div class="explain-title">해설</div>
+          <div class="explain-meta" id="explainMeta"></div>
+        </div>
+
+        <div class="explain-body">
+          <div class="explain-row">
+            <span class="label">내 선택</span>
+            <span class="value" id="myPickText">-</span>
+          </div>
+          <div class="explain-row">
+            <span class="label">정답</span>
+            <span class="value" id="answerText">-</span>
+          </div>
+
+          <div class="explain-text" id="explainText"></div>
+        </div>
+
+        <button id="btnHideExplain" class="btn-ghost" type="button">해설 접기</button>
+      </section>
+
       <div class="spacer"></div>
     </main>
 
@@ -90,30 +113,6 @@
         <button class="dot" data-choice="3">3</button>
         <button class="dot" data-choice="4">4</button>
       </div>
-
-      <!-- ✅ 해설 박스 (채점 시 자동 펼침) -->
-<section id="explainPanel" class="explain-panel hidden" aria-live="polite">
-  <div class="explain-head">
-    <div class="explain-title">해설</div>
-    <div class="explain-meta" id="explainMeta"></div>
-  </div>
-
-  <div class="explain-body">
-    <div class="explain-row">
-      <span class="label">내 선택</span>
-      <span class="value" id="myPickText">-</span>
-    </div>
-    <div class="explain-row">
-      <span class="label">정답</span>
-      <span class="value" id="answerText">-</span>
-    </div>
-
-    <div class="explain-text" id="explainText"></div>
-  </div>
-
-  <button id="btnHideExplain" class="btn-ghost" type="button">해설 접기</button>
-</section>
-
 
       <button id="btnNext" class="next-btn" title="다음">›</button>
     </footer>
@@ -131,6 +130,6 @@
     <div id="toast" class="toast hidden"></div>
   </section>
 
-  <script src="app.js?v=1"></script>
+  <script src="app.js?v=2"></script>
 </body>
 </html>
