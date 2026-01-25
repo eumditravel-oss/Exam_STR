@@ -211,7 +211,11 @@ body{
   gap: 10px;
 }
 
-/* Image crop card */
+/* =========================
+   ✅ Image crop card (PIXEL CROP)
+   - app.js가 box 높이를 crop.h에 맞춰 동적으로 지정함
+   - 여기서는 overflow/기본 레이아웃만 보장
+   ========================= */
 .crop-card{
   background:#fff;
   border: 1px solid rgba(0,0,0,.08);
@@ -222,12 +226,19 @@ body{
 .crop-box{
   width:100%;
   position:relative;
-  overflow:hidden;          /* ✅ 핵심 */
+  overflow:hidden;          /* ✅ 핵심: 잘라내기 */
   background:#f7f6f3;
-  height: 520px;            /* ✅ 원하는 표시 높이(420~620 추천) */
+  height:auto;              /* ✅ app.js가 crop 기반으로 height를 px로 넣음 */
+  min-height: 160px;        /* ✅ 로딩/아주 작은 crop 안전장치 */
 }
-.crop-box::after{ display:none; }  /* ✅ 기존 비율박스 트릭 제거 */
+.crop-box::after{ display:none; } /* ✅ 예전 비율 트릭 제거 */
 
+.crop-img-el{
+  display:block;
+  position:absolute;        /* ✅ app.js가 left/top/width/height로 이동/확대 */
+  user-select:none;
+  -webkit-user-drag:none;
+}
 
 .crop-note{
   padding: 10px 12px;
@@ -235,6 +246,7 @@ body{
   font-size: 12px;
   color: var(--muted);
 }
+
 .spacer{ height: 12px; }
 
 /* BOTTOMBAR */
@@ -346,7 +358,6 @@ body{
   text-align:center;
 }
 
-
 /* ✅ Explain Panel */
 .explain-panel{
   margin-top: 12px;
@@ -356,7 +367,6 @@ body{
   box-shadow: 0 10px 26px rgba(0,0,0,.06);
   padding: 12px 12px 10px;
 }
-
 .explain-head{
   display:flex;
   align-items:center;
@@ -364,25 +374,21 @@ body{
   gap:10px;
   margin-bottom: 8px;
 }
-
 .explain-title{
   font-weight: 900;
   font-size: 15px;
   letter-spacing: -0.2px;
 }
-
 .explain-meta{
   font-size: 12px;
   color: rgba(0,0,0,.55);
   white-space: nowrap;
 }
-
 .explain-body{
   display:flex;
   flex-direction:column;
   gap:8px;
 }
-
 .explain-row{
   display:flex;
   gap:10px;
@@ -397,7 +403,6 @@ body{
 .explain-row .value{
   font-weight: 900;
 }
-
 .explain-text{
   font-size: 13px;
   line-height: 1.5;
@@ -405,7 +410,6 @@ body{
   padding-top: 6px;
   border-top: 1px dashed rgba(0,0,0,.10);
 }
-
 .btn-ghost{
   margin-top: 10px;
   width: 100%;
@@ -416,12 +420,3 @@ body{
   font-weight: 800;
 }
 .btn-ghost:active{ transform: scale(.99); }
-
-
-.crop-img-el{
-  display:block;
-  user-select:none;
-  -webkit-user-drag:none;
-}
-
-
