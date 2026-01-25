@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>기출문제 랜덤 풀이</title>
-  <link rel="stylesheet" href="styles.css?v=2" />
+  <link rel="stylesheet" href="styles.css?v=3" />
 </head>
 <body>
   <!-- HOME -->
@@ -12,7 +12,7 @@
     <div class="home-wrap">
       <div class="home-card">
         <div class="home-title">기출문제 랜덤 풀이</div>
-        <div class="home-sub">과목 선택 → 랜덤 문항 수 선택 → 풀이</div>
+        <div class="home-sub">과목 선택 → 랜덤 문항 수 선택 → 풀이 → 결과</div>
 
         <div class="subject-grid">
           <button class="subject-btn" data-subject="재무회계">1. 재무회계</button>
@@ -61,7 +61,8 @@
         <span class="timer-ico" aria-hidden="true">⏱</span>
       </div>
 
-      <button id="btnGrade" class="grade-btn">채점</button>
+      <!-- ✅ 풀이중엔 채점/해설 없음 -->
+      <div class="topbar-right-spacer"></div>
     </header>
 
     <main class="quiz-main">
@@ -75,29 +76,6 @@
       </div>
 
       <div id="qImageStack" class="q-image-stack"></div>
-
-      <!-- ✅ 해설 박스 (채점 시 자동 펼침) -->
-      <section id="explainPanel" class="explain-panel hidden" aria-live="polite">
-        <div class="explain-head">
-          <div class="explain-title">해설</div>
-          <div class="explain-meta" id="explainMeta"></div>
-        </div>
-
-        <div class="explain-body">
-          <div class="explain-row">
-            <span class="label">내 선택</span>
-            <span class="value" id="myPickText">-</span>
-          </div>
-          <div class="explain-row">
-            <span class="label">정답</span>
-            <span class="value" id="answerText">-</span>
-          </div>
-
-          <div class="explain-text" id="explainText"></div>
-        </div>
-
-        <button id="btnHideExplain" class="btn-ghost" type="button">해설 접기</button>
-      </section>
 
       <div class="spacer"></div>
     </main>
@@ -130,6 +108,32 @@
     <div id="toast" class="toast hidden"></div>
   </section>
 
-  <script src="app.js?v=2"></script>
+  <!-- RESULT -->
+  <section id="result" class="screen hidden">
+    <header class="topbar">
+      <button id="btnResultHome" class="icon-btn" title="홈">⌂</button>
+      <div class="timer-pill">
+        <span id="resultTitle">결과</span>
+      </div>
+      <button id="btnRetry" class="icon-btn" title="다시">↻</button>
+    </header>
+
+    <main class="result-main">
+      <div class="result-card">
+        <div class="result-score">
+          <div class="big" id="scoreText">-</div>
+          <div class="sub" id="scoreMeta">-</div>
+        </div>
+        <div class="result-actions">
+          <button id="btnOnlyWrong" class="btn primary">오답만 보기</button>
+          <button id="btnAllList" class="btn">전체 보기</button>
+        </div>
+      </div>
+
+      <div id="resultList" class="result-list"></div>
+    </main>
+  </section>
+
+  <script src="app.js?v=3"></script>
 </body>
 </html>
