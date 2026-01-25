@@ -1,0 +1,12 @@
+[
+  {
+    "id": "재무회계-10-001",
+    "subject": "재무회계",
+    "session": 10,
+    "no": 1,
+    "choices": 4,
+    "answer": 3,
+    "explain": "해설 예시",
+    "parts": []
+  }
+]
