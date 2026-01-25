@@ -1,8 +1,7 @@
-/* app.js - Image-based Quiz (bank.json + answers.json + explanations.json)
-   - 과목 선택 → 랜덤 문항 수 선택 → 풀이 UI
-   - 정답/해설은 분리 파일에서 우선 로드 (없으면 bank.json fallback)
-   - ✅ crop: px 방식 / 0~1 정규화 방식 모두 지원
-   - ✅ 크롭 영역 높이 자동 맞춤(한 문제씩 보기)
+/* app.js - Random Quiz (finish → results)
+   - 풀이 중 정답/해설/채점 기능 노출 X
+   - 마지막까지 다 풀면 결과 화면에서 오답 + 정답/해설 제공
+   - ✅ crop: px / 0~1 정규화 자동 인식
 */
 
 const $ = (sel) => document.querySelector(sel);
@@ -12,23 +11,24 @@ const SCREENS = {
   home: $("#home"),
   pick: $("#pick"),
   quiz: $("#quiz"),
+  result: $("#result"),
 };
 
 const state = {
   subject: null,
   bank: [],
 
-  // ✅ 분리 데이터(정답/해설)
-  answerMap: {},      // { [id]: 1~4 }
-  explainMap: {},     // { [id]: "..." }
+  answerMap: {},   // 분리 정답 (optional)
+  explainMap: {},  // 분리 해설 (optional)
 
   quizItems: [],
   idx: 0,
-  answers: {},        // { id: 1~4 } (사용자 선택)
-  graded: {},         // { id: true/false } (채점 버튼 누른 뒤 표시)
-
+  answers: {},     // 사용자 선택 {id:1~4}
   timerStart: null,
   timerHandle: null,
+
+  // 결과 필터
+  showOnlyWrong: true,
 };
 
 function showScreen(name){
@@ -46,7 +46,6 @@ function toast(msg){
   el._t = setTimeout(() => el.classList.add("hidden"), 1600);
 }
 
-// ✅ 안전 로드(없어도 앱 동작)
 async function loadJsonOptional(url){
   try{
     const res = await fetch(url + (url.includes("?") ? "&" : "?") + "v=" + Date.now());
@@ -65,42 +64,25 @@ async function loadBank(){
 }
 
 async function loadAnswerAndExplain(){
-  // answers.json 지원 형태:
-  // 1) {"재무회계-10-001": 3, ... }
-  // 2) [{ "id":"재무회계-10-001", "answer":3 }, ...]
   const a = await loadJsonOptional("data/answers.json");
   const ansMap = {};
-
   if(Array.isArray(a)){
-    a.forEach(r => {
-      if(r && r.id && typeof r.answer === "number") ansMap[r.id] = r.answer;
-    });
+    a.forEach(r => { if(r?.id && typeof r.answer === "number") ansMap[r.id] = r.answer; });
   }else if(a && typeof a === "object"){
-    Object.entries(a).forEach(([k,v]) => {
-      if(typeof v === "number") ansMap[k] = v;
-    });
+    Object.entries(a).forEach(([k,v]) => { if(typeof v === "number") ansMap[k] = v; });
   }
   state.answerMap = ansMap;
 
-  // explanations.json 지원 형태:
-  // 1) {"재무회계-10-001": "해설...", ... }
-  // 2) [{ "id":"재무회계-10-001", "explain":"..." }, ...]
   const e = await loadJsonOptional("data/explanations.json");
   const expMap = {};
-
   if(Array.isArray(e)){
-    e.forEach(r => {
-      if(r && r.id && typeof r.explain === "string") expMap[r.id] = r.explain;
-    });
+    e.forEach(r => { if(r?.id && typeof r.explain === "string") expMap[r.id] = r.explain; });
   }else if(e && typeof e === "object"){
-    Object.entries(e).forEach(([k,v]) => {
-      if(typeof v === "string") expMap[k] = v;
-    });
+    Object.entries(e).forEach(([k,v]) => { if(typeof v === "string") expMap[k] = v; });
   }
   state.explainMap = expMap;
 }
 
-// ✅ 정답/해설 getter (분리파일 우선, 없으면 bank.json fallback)
 function getAnswerFor(q){
   const v = state.answerMap?.[q.id];
   if(typeof v === "number") return v;
@@ -125,9 +107,7 @@ function fmtTime(ms){
   const sec = Math.max(0, Math.floor(ms/1000));
   const m = Math.floor(sec/60);
   const s = sec % 60;
-  const mm = String(m).padStart(2,"0");
-  const ss = String(s).padStart(2,"0");
-  return `${mm}:${ss}`;
+  return `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
 }
 
 function startTimer(){
@@ -144,129 +124,47 @@ function stopTimer(){
   state.timerHandle = null;
 }
 
-function pickQuestions(subject, count){
-  const all = state.bank.filter(q => q.subject === subject);
-  const max = all.length;
-  const n = Math.max(1, Math.min(count, max || 1));
-  return shuffle(all).slice(0, n);
-}
-
-/* ✅ 해설 패널 */
-function hideExplainPanel(){
-  const p = $("#explainPanel");
-  if(p) p.classList.add("hidden");
-}
-function showExplainPanel(q){
-  const p = $("#explainPanel");
-  if(!p) return;
-
-  const sel = state.answers[q.id] ?? null;
-  const ans = getAnswerFor(q);
-  const exp = getExplainFor(q);
-
-  const meta = $("#explainMeta");
-  const myPick = $("#myPickText");
-  const answerText = $("#answerText");
-  const expText = $("#explainText");
-
-  if(meta) meta.textContent = `${q.subject} / ${q.session}회 / ${q.no}번`;
-  if(myPick) myPick.textContent = (sel === null) ? "-" : `${sel}번`;
-  if(answerText) answerText.textContent = (typeof ans === "number") ? `${ans}번` : "-";
-  if(expText) expText.textContent = exp ? exp : "해설 데이터가 아직 없습니다.";
-
-  p.classList.remove("hidden");
-}
-
-/* =========================
-   ✅ Crop 유틸 (핵심)
-   - crop이 px이든(80,250,...) 0~1이든(0.0312,...) 자동 판별
-   - box 폭 기준 스케일로 이미지 이동/확대
-   - box 높이를 crop 높이에 맞춰 자동 설정(한 문제씩 보기)
-========================= */
-
+/* ===== Crop Utils (px / norm) ===== */
 function isNormalizedCrop(c){
-  // x,y,w,h가 0~1 범위면 정규화로 간주(약간의 오차 허용)
   if(!c) return false;
   const vals = [c.x, c.y, c.w, c.h];
   if(vals.some(v => typeof v !== "number")) return false;
   return vals.every(v => v >= -0.001 && v <= 1.001);
 }
-
 function toPixelCrop(crop, iw, ih){
   if(!crop) return null;
   if(isNormalizedCrop(crop)){
-    return {
-      x: crop.x * iw,
-      y: crop.y * ih,
-      w: crop.w * iw,
-      h: crop.h * ih
-    };
+    return { x: crop.x*iw, y: crop.y*ih, w: crop.w*iw, h: crop.h*ih };
   }
-  // px crop 그대로
   return { x: crop.x, y: crop.y, w: crop.w, h: crop.h };
 }
-
 function applyCrop(box, img){
   const raw = JSON.parse(box.dataset.crop || "null");
   if(!raw) return;
 
   const iw = img.naturalWidth || 1;
   const ih = img.naturalHeight || 1;
-
   const c = toPixelCrop(raw, iw, ih);
   if(!c || !isFinite(c.w) || !isFinite(c.h) || c.w <= 0 || c.h <= 0) return;
 
-  // box 폭 기준으로 "crop.w"가 꽉 차도록 스케일
   const boxW = box.clientWidth || 1;
   const scale = boxW / c.w;
 
-  // ✅ box 높이를 crop.h에 맞춰 자동 설정(한 문제 영역만 보이게)
-  // 너무 작거나 너무 커지는 것 방지(기본값)
   const minH = 220;
   const maxH = 900;
   const targetH = Math.max(minH, Math.min(c.h * scale, maxH));
   box.style.height = `${Math.round(targetH)}px`;
 
-  // crop 영역이 box에 정확히 나오도록 이미지 이동/확대
   img.style.position = "absolute";
   img.style.left = (-c.x * scale) + "px";
   img.style.top  = (-c.y * scale) + "px";
   img.style.width  = (iw * scale) + "px";
   img.style.height = (ih * scale) + "px";
 }
-
-function reapplyAllCrops(){
-  document.querySelectorAll(".crop-box").forEach(box=>{
-    const img = box.querySelector("img.crop-img-el");
-    if(!img) return;
-    if(box.dataset.crop){
-      // naturalWidth가 아직 0일 수 있어서 load 이후 재적용 필요
-      if(img.complete && img.naturalWidth){
-        applyCrop(box, img);
-      }
-    }
-  });
-}
-
-/* ========================= */
-
-function renderQuestion(){
-  const q = state.quizItems[state.idx];
-  if(!q) return;
-
-  $("#qNo").textContent = `${q.no}번`;
-  $("#qStatus").textContent = "풀이";
-  $("#qMeta").textContent = `${q.subject} / ${q.session}회`;
-  $("#progressText").textContent = `${state.idx + 1}/${state.quizItems.length}`;
-
-  // 문제 바뀌면 해설은 접기(채점 누르면 다시 열림)
-  hideExplainPanel();
-
-  // 이미지 스택(= 7번처럼 parts 여러개면 합쳐서 표시)
-  const stack = $("#qImageStack");
-  stack.innerHTML = "";
-
+function renderPartsInto(container, q){
+  container.innerHTML = "";
   const parts = Array.isArray(q.parts) && q.parts.length ? q.parts : [];
+
   parts.forEach((p, pidx) => {
     const card = document.createElement("div");
     card.className = "crop-card";
@@ -280,14 +178,9 @@ function renderQuestion(){
     img.src = p.pageImage;
 
     if(p.crop && typeof p.crop.x === "number"){
-      // crop 데이터 저장
       box.dataset.crop = JSON.stringify(p.crop);
-
-      img.addEventListener("load", () => {
-        applyCrop(box, img);
-      });
+      img.addEventListener("load", () => applyCrop(box, img));
     }else{
-      // crop 미설정: 전체 이미지(contain)
       box.style.height = "520px";
       img.style.position = "relative";
       img.style.width = "100%";
@@ -299,60 +192,30 @@ function renderQuestion(){
 
     const note = document.createElement("div");
     note.className = "crop-note";
-    note.textContent = p.crop ? `part ${pidx+1} / crop 적용` : `part ${pidx+1} / crop 미설정(전체 페이지 표시)`;
+    note.textContent = `part ${pidx+1}`;
 
     card.appendChild(box);
     card.appendChild(note);
-    stack.appendChild(card);
+    container.appendChild(card);
   });
-
-  // 선택 표시
-  const selected = state.answers[q.id] ?? null;
-  $$("#choiceDots .dot").forEach(btn => {
-    const c = Number(btn.dataset.choice);
-    btn.classList.toggle("selected", selected === c);
-    btn.classList.remove("correct","wrong");
-  });
-
-  // 채점 표시
-  if(state.graded[q.id]){
-    paintGrade(q);
-  }
 }
 
-function paintGrade(q){
-  const sel = state.answers[q.id] ?? null;
-  const ans = getAnswerFor(q);
-
-  $$("#choiceDots .dot").forEach(btn => {
-    const c = Number(btn.dataset.choice);
-    btn.classList.remove("correct","wrong");
-
-    if(typeof ans === "number"){
-      if(c === ans) btn.classList.add("correct");
-      if(sel !== null && c === sel && sel !== ans) btn.classList.add("wrong");
+function reapplyAllCrops(){
+  document.querySelectorAll(".crop-box").forEach(box=>{
+    const img = box.querySelector("img.crop-img-el");
+    if(!img) return;
+    if(img.complete && img.naturalWidth && box.dataset.crop){
+      applyCrop(box, img);
     }
   });
-
-  if(typeof ans !== "number"){
-    toast("이 문항은 아직 정답 데이터가 없습니다.");
-  }else{
-    if(sel === null) toast("선택이 없습니다.");
-    else toast(sel === ans ? "정답!" : "오답");
-  }
-
-  // 채점 누르면 해설 패널 자동 펼침
-  showExplainPanel(q);
 }
+/* ================================ */
 
-function nextQuestion(){
-  if(state.idx < state.quizItems.length - 1){
-    state.idx++;
-    renderQuestion();
-    return;
-  }
-  stopTimer();
-  toast("끝!");
+function pickQuestions(subject, count){
+  const all = state.bank.filter(q => q.subject === subject);
+  const max = all.length;
+  const n = Math.max(1, Math.min(count, max || 1));
+  return shuffle(all).slice(0, n);
 }
 
 function resetAll(){
@@ -361,29 +224,156 @@ function resetAll(){
   state.quizItems = [];
   state.idx = 0;
   state.answers = {};
-  state.graded = {};
+  state.showOnlyWrong = true;
   const t = $("#timerText");
   if(t) t.textContent = "00:00";
-  hideExplainPanel();
   showScreen("home");
 }
 
-function openSheet(){
-  $("#sheet").classList.remove("hidden");
+function openSheet(){ $("#sheet").classList.remove("hidden"); }
+function closeSheet(){ $("#sheet").classList.add("hidden"); }
+
+function renderQuestion(){
+  const q = state.quizItems[state.idx];
+  if(!q) return;
+
+  $("#qNo").textContent = `${q.no}번`;
+  $("#qStatus").textContent = "풀이";
+  $("#qMeta").textContent = `${q.subject} / ${q.session}회`;
+  $("#progressText").textContent = `${state.idx + 1}/${state.quizItems.length}`;
+
+  // 마지막 문제면 다음 버튼을 "결과"로 표시
+  const isLast = state.idx === state.quizItems.length - 1;
+  $("#btnNext").textContent = isLast ? "결과" : "›";
+
+  // 문제 이미지
+  renderPartsInto($("#qImageStack"), q);
+
+  // 선택 표시만
+  const selected = state.answers[q.id] ?? null;
+  $$("#choiceDots .dot").forEach(btn => {
+    const c = Number(btn.dataset.choice);
+    btn.classList.toggle("selected", selected === c);
+  });
 }
-function closeSheet(){
-  $("#sheet").classList.add("hidden");
+
+function nextStep(){
+  const isLast = state.idx === state.quizItems.length - 1;
+  if(!isLast){
+    state.idx++;
+    renderQuestion();
+    return;
+  }
+
+  // ✅ 마지막이면 결과 화면으로
+  stopTimer();
+  renderResults();
+  showScreen("result");
 }
+
+/* ===== 결과 화면 ===== */
+function computeResult(){
+  const total = state.quizItems.length;
+  let correct = 0;
+  const rows = state.quizItems.map(q => {
+    const my = state.answers[q.id] ?? null;
+    const ans = getAnswerFor(q); // null 가능
+    const ok = (typeof ans === "number") && (my === ans);
+    if(ok) correct++;
+    return { q, my, ans, ok, explain: getExplainFor(q) };
+  });
+
+  const wrong = rows.filter(r => !r.ok);
+  return { total, correct, wrongCount: total - correct, rows, wrong };
+}
+
+function renderResults(){
+  const elapsed = state.timerStart ? (Date.now() - state.timerStart) : 0;
+  const t = fmtTime(elapsed);
+
+  const { total, correct, wrongCount, rows, wrong } = computeResult();
+
+  $("#scoreText").textContent = `${correct} / ${total} 정답`;
+  $("#scoreMeta").textContent = `소요시간 ${t} · 오답 ${wrongCount}문항`;
+
+  const list = $("#resultList");
+  list.innerHTML = "";
+
+  const data = state.showOnlyWrong ? wrong : rows;
+
+  if(data.length === 0){
+    const empty = document.createElement("div");
+    empty.className = "result-card";
+    empty.textContent = "표시할 항목이 없습니다.";
+    list.appendChild(empty);
+    return;
+  }
+
+  data.forEach((r) => {
+    const q = r.q;
+    const my = r.my;
+    const ans = r.ans;
+    const ok = r.ok;
+
+    const card = document.createElement("div");
+    card.className = "wrong-card";
+
+    const head = document.createElement("div");
+    head.className = "wrong-head";
+
+    const title = document.createElement("div");
+    title.className = "wrong-title";
+    title.textContent = `${q.subject} / ${q.session}회 / ${q.no}번`;
+
+    const pill = document.createElement("div");
+    pill.className = "pill " + (ok ? "good" : "bad");
+    pill.textContent = ok ? "정답" : "오답";
+
+    head.appendChild(title);
+    head.appendChild(pill);
+
+    const body = document.createElement("div");
+    body.className = "wrong-body";
+
+    // 이미지(문제 영역 그대로)
+    const imgWrap = document.createElement("div");
+    renderPartsInto(imgWrap, q);
+
+    const row1 = document.createElement("div");
+    row1.className = "qa-row";
+    row1.innerHTML = `<span class="k">내 선택</span><span class="v">${my === null ? "-" : my + "번"}</span>`;
+
+    const row2 = document.createElement("div");
+    row2.className = "qa-row";
+    row2.innerHTML = `<span class="k">정답</span><span class="v">${typeof ans === "number" ? ans + "번" : "-"}</span>`;
+
+    const exp = document.createElement("div");
+    exp.className = "explain-box";
+    exp.textContent = (r.explain && r.explain.trim())
+      ? r.explain
+      : "해설 데이터가 아직 없습니다.";
+
+    body.appendChild(imgWrap);
+    body.appendChild(row1);
+    body.appendChild(row2);
+    body.appendChild(exp);
+
+    card.appendChild(head);
+    card.appendChild(body);
+    list.appendChild(card);
+  });
+
+  // 결과 화면에서 crop 재적용(이미지 로드 타이밍 보정)
+  setTimeout(reapplyAllCrops, 80);
+}
+/* ===================== */
 
 async function init(){
   showScreen("home");
 
-  // ✅ 리사이즈/회전 시 crop 재적용
-  window.addEventListener("resize", () => {
-    reapplyAllCrops();
-  });
+  window.addEventListener("resize", () => reapplyAllCrops());
 
-  // 1) bank 로드(필수)
+  // 1) bank 필수
   try{
     await loadBank();
   }catch(e){
@@ -391,15 +381,14 @@ async function init(){
     return;
   }
 
-  // 2) answers/explanations 로드(선택)
+  // 2) answers/explanations 선택
   await loadAnswerAndExplain();
 
   // HOME: 과목 선택
   $$(".subject-btn").forEach(btn => {
     btn.addEventListener("click", () => {
-      const subj = btn.dataset.subject;
       if(btn.disabled) return;
-
+      const subj = btn.dataset.subject;
       state.subject = subj;
 
       const total = state.bank.filter(q => q.subject === subj).length;
@@ -425,15 +414,14 @@ async function init(){
     state.quizItems = pickQuestions(state.subject, n);
     state.idx = 0;
     state.answers = {};
-    state.graded = {};
-    hideExplainPanel();
+    state.showOnlyWrong = true;
 
     showScreen("quiz");
     startTimer();
     renderQuestion();
   });
 
-  // QUIZ: 선택
+  // QUIZ: 선택 (풀이 중엔 정답/해설 노출 X)
   $$("#choiceDots .dot").forEach(btn => {
     btn.addEventListener("click", () => {
       const q = state.quizItems[state.idx];
@@ -444,24 +432,21 @@ async function init(){
     });
   });
 
-  // 다음
-  $("#btnNext").addEventListener("click", nextQuestion);
-
-  // 채점
-  $("#btnGrade").addEventListener("click", () => {
+  // 다음(마지막이면 결과)
+  $("#btnNext").addEventListener("click", () => {
+    // 마지막에서 미선택이면 경고만(원하면 강제 선택도 가능)
     const q = state.quizItems[state.idx];
-    if(!q) return;
-    state.graded[q.id] = true;
-    paintGrade(q);
+    const isLast = state.idx === state.quizItems.length - 1;
+    const my = state.answers[q.id] ?? null;
+    if(my === null){
+      toast("선택하지 않았습니다. 그대로 진행할까요?");
+      // 한번 더 누르면 넘어가게 하려면 아래 주석 해제하고 flag 쓰면 됨
+      // (지금은 바로 진행 가능하게 유지)
+    }
+    nextStep();
   });
 
-  // 해설 접기 버튼
-  const btnHide = $("#btnHideExplain");
-  if(btnHide){
-    btnHide.addEventListener("click", hideExplainPanel);
-  }
-
-  // 나가기(홈으로)
+  // 나가기(초기화)
   $("#btnExit").addEventListener("click", () => {
     if(confirm("나가면 풀이 기록이 초기화됩니다. 나갈까요?")){
       resetAll();
@@ -482,11 +467,40 @@ async function init(){
     }
   });
 
-  // 키보드(PC 편의)
+  // RESULT 버튼들
+  $("#btnResultHome").addEventListener("click", () => resetAll());
+  $("#btnRetry").addEventListener("click", () => {
+    // 같은 과목/같은 개수로 재시작
+    const subj = state.subject;
+    const count = state.quizItems.length || 20;
+    if(!subj){
+      resetAll();
+      return;
+    }
+    state.quizItems = pickQuestions(subj, count);
+    state.idx = 0;
+    state.answers = {};
+    state.showOnlyWrong = true;
+
+    showScreen("quiz");
+    startTimer();
+    renderQuestion();
+  });
+
+  $("#btnOnlyWrong").addEventListener("click", () => {
+    state.showOnlyWrong = true;
+    renderResults();
+  });
+  $("#btnAllList").addEventListener("click", () => {
+    state.showOnlyWrong = false;
+    renderResults();
+  });
+
+  // 키보드 (선택/다음)
   window.addEventListener("keydown", (e) => {
     if(SCREENS.quiz.classList.contains("hidden")) return;
 
-    if(e.key === "ArrowRight") nextQuestion();
+    if(e.key === "ArrowRight") $("#btnNext").click();
     if(["1","2","3","4"].includes(e.key)){
       const q = state.quizItems[state.idx];
       if(!q) return;
