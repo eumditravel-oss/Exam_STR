@@ -3,7 +3,7 @@
    - 마지막까지 다 풀면 결과 화면에서 오답 + 정답/해설 제공
    - ✅ 오답만 다시 풀기(오답 재시험) 추가
    - ✅ crop: px / 0~1 정규화 자동 인식
-   - ✅ crop 박스 높이 정확히 = cropH * scale (다른 문제 영역이 절대 보이지 않게)
+   - ✅ FIX: crop-box height를 minH로 강제하지 않고 crop.h에 정확히 맞춤
 */
 
 const $ = (sel) => document.querySelector(sel);
@@ -20,16 +20,15 @@ const state = {
   subject: null,
   bank: [],
 
-  answerMap: {},   // 분리 정답 (optional)
-  explainMap: {},  // 분리 해설 (optional)
+  answerMap: {},
+  explainMap: {},
 
   quizItems: [],
   idx: 0,
-  answers: {},     // 사용자 선택 {id:1~4}
+  answers: {},
   timerStart: null,
   timerHandle: null,
 
-  // 결과 필터
   showOnlyWrong: true,
 };
 
@@ -126,22 +125,13 @@ function stopTimer(){
   state.timerHandle = null;
 }
 
-/* =========================================================
-   ✅ Crop Utils (px / norm) - "정확 크롭" 버전
-   - crop이 0~1 범위면 정규화로 보고 px로 변환
-   - scale = boxW / cropW
-   - boxH  = cropH * scale  (절대 clamp로 바꾸지 않음 → 다른 영역이 안 보임)
-   - 리사이즈/렌더 후 재적용
-========================================================= */
-
+/* ===== Crop Utils (px / norm) ===== */
 function isNormalizedCrop(c){
   if(!c) return false;
   const vals = [c.x, c.y, c.w, c.h];
   if(vals.some(v => typeof v !== "number")) return false;
-  // 0~1 근처면 normalized로 간주
   return vals.every(v => v >= -0.001 && v <= 1.001);
 }
-
 function toPixelCrop(crop, iw, ih){
   if(!crop) return null;
   if(isNormalizedCrop(crop)){
@@ -151,33 +141,27 @@ function toPixelCrop(crop, iw, ih){
 }
 
 function applyCrop(box, img){
-  const raw = box.dataset.crop ? JSON.parse(box.dataset.crop) : null;
+  const raw = JSON.parse(box.dataset.crop || "null");
   if(!raw) return;
 
   const iw = img.naturalWidth || 1;
   const ih = img.naturalHeight || 1;
-
   const c = toPixelCrop(raw, iw, ih);
   if(!c || !isFinite(c.w) || !isFinite(c.h) || c.w <= 0 || c.h <= 0) return;
 
   const boxW = box.clientWidth || 1;
+  const scale = boxW / c.w;
 
-  // ✅ crop 폭을 박스 폭에 "딱" 맞추는 스케일
-  let scale = boxW / c.w;
-
-  // (선택) 너무 세로가 과도하게 길면 scale을 줄여서 제한할 수 있음
-  // 단, 이 경우 crop가 박스 폭을 가득 채우지 않게 되므로 기본은 꺼둠
-  // const maxH = 1200;
-  // if(c.h * scale > maxH) scale = maxH / c.h;
-
-  const targetH = Math.round(c.h * scale);
-  box.style.height = `${targetH}px`;
+  // ✅ 핵심 FIX: minH 강제로 키우지 말고 crop.h에 맞춰 정확히 자르기
+  const maxH = 1200; // 너무 큰 크롭만 제한
+  const targetH = Math.max(10, Math.min(c.h * scale, maxH));
+  box.style.height = `${Math.round(targetH)}px`;
 
   img.style.position = "absolute";
-  img.style.left = `${Math.round(-c.x * scale)}px`;
-  img.style.top  = `${Math.round(-c.y * scale)}px`;
-  img.style.width  = `${Math.round(iw * scale)}px`;
-  img.style.height = `${Math.round(ih * scale)}px`;
+  img.style.left = (-c.x * scale) + "px";
+  img.style.top  = (-c.y * scale) + "px";
+  img.style.width  = (iw * scale) + "px";
+  img.style.height = (ih * scale) + "px";
 }
 
 function renderPartsInto(container, q){
@@ -198,10 +182,16 @@ function renderPartsInto(container, q){
 
     if(p.crop && typeof p.crop.x === "number"){
       box.dataset.crop = JSON.stringify(p.crop);
-      img.addEventListener("load", () => applyCrop(box, img));
+
+      img.addEventListener("load", () => {
+        // ✅ 레이아웃이 아직 덜 잡힌 경우가 있어 한 프레임(필요시 두 프레임) 뒤에 적용
+        requestAnimationFrame(() => {
+          applyCrop(box, img);
+          requestAnimationFrame(() => applyCrop(box, img));
+        });
+      });
     }else{
-      // crop 없으면 전체 표시(기존 유지)
-      box.style.height = "520px";
+      box.style.height = "260px";
       img.style.position = "relative";
       img.style.width = "100%";
       img.style.height = "100%";
@@ -224,19 +214,10 @@ function reapplyAllCrops(){
   document.querySelectorAll(".crop-box").forEach(box=>{
     const img = box.querySelector("img.crop-img-el");
     if(!img) return;
-    if(box.dataset.crop && img.complete && img.naturalWidth){
+    if(img.complete && img.naturalWidth && box.dataset.crop){
       applyCrop(box, img);
     }
   });
-}
-
-// resize 디바운스(모바일 주소창 변화에도 안정)
-let _rzT = null;
-function scheduleReapply(){
-  clearTimeout(_rzT);
-  _rzT = setTimeout(() => {
-    requestAnimationFrame(reapplyAllCrops);
-  }, 60);
 }
 /* ================================ */
 
@@ -281,9 +262,6 @@ function renderQuestion(){
     const c = Number(btn.dataset.choice);
     btn.classList.toggle("selected", selected === c);
   });
-
-  // ✅ 렌더 직후(이미지 로드 전)에도 박스 폭이 안정되면 재적용
-  setTimeout(reapplyAllCrops, 40);
 }
 
 function nextStep(){
@@ -305,7 +283,7 @@ function computeResult(){
 
   const rows = state.quizItems.map(q => {
     const my = state.answers[q.id] ?? null;
-    const ans = getAnswerFor(q); // null 가능
+    const ans = getAnswerFor(q);
     const ok = (typeof ans === "number") && (my === ans);
     if(ok) correct++;
     return { q, my, ans, ok, explain: getExplainFor(q) };
@@ -401,16 +379,14 @@ function renderResults(){
     list.appendChild(card);
   });
 
-  // ✅ 결과 화면도 크롭 재적용
-  setTimeout(reapplyAllCrops, 60);
+  setTimeout(reapplyAllCrops, 80);
 }
 /* ========================= */
 
 async function init(){
   showScreen("home");
 
-  // ✅ resize 시 crop 재계산
-  window.addEventListener("resize", scheduleReapply);
+  window.addEventListener("resize", () => reapplyAllCrops());
 
   try{
     await loadBank();
@@ -496,7 +472,6 @@ async function init(){
   $("#btnResultHome").addEventListener("click", () => resetAll());
 
   $("#btnRetry").addEventListener("click", () => {
-    // 같은 과목/같은 개수로 "새 랜덤" 재시작
     const subj = state.subject;
     const count = state.quizItems.length || 20;
     if(!subj){
