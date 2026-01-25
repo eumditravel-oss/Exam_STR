@@ -17,14 +17,15 @@ const state = {
 
   bank: [],
 
-  // ✅ 분리 데이터
+  // ✅ 분리 데이터(정답/해설)
   answerMap: {},      // { [id]: 1~4 }
   explainMap: {},     // { [id]: "..." }
 
   quizItems: [],
   idx: 0,
-  answers: {},        // { id: 1~4 }
-  graded: {},         // { id: true/false }
+  answers: {},        // { id: 1~4 } (사용자 선택)
+  graded: {},         // { id: true/false } (채점 버튼 누른 뒤 표시)
+
   timerStart: null,
   timerHandle: null,
 };
@@ -37,6 +38,7 @@ function showScreen(name){
 
 function toast(msg){
   const el = $("#toast");
+  if(!el) return;
   el.textContent = msg;
   el.classList.remove("hidden");
   clearTimeout(el._t);
@@ -62,26 +64,50 @@ async function loadBank(){
 }
 
 async function loadAnswerAndExplain(){
-  // answers.json: { "재무회계-10-001": 3, ... }
+  // answers.json 지원 형태:
+  // 1) {"재무회계-10-001": 3, ... }
+  // 2) [{ "id":"재무회계-10-001", "answer":3 }, ...]
   const a = await loadJsonOptional("data/answers.json");
-  state.answerMap = (a && typeof a === "object" && !Array.isArray(a)) ? a : {};
+  const ansMap = {};
 
-  // explanations.json: { "재무회계-10-001": "해설...", ... }
+  if(Array.isArray(a)){
+    a.forEach(r => {
+      if(r && r.id && typeof r.answer === "number") ansMap[r.id] = r.answer;
+    });
+  }else if(a && typeof a === "object"){
+    Object.entries(a).forEach(([k,v]) => {
+      if(typeof v === "number") ansMap[k] = v;
+    });
+  }
+  state.answerMap = ansMap;
+
+  // explanations.json 지원 형태:
+  // 1) {"재무회계-10-001": "해설...", ... }
+  // 2) [{ "id":"재무회계-10-001", "explain":"..." }, ...]
   const e = await loadJsonOptional("data/explanations.json");
-  state.explainMap = (e && typeof e === "object" && !Array.isArray(e)) ? e : {};
+  const expMap = {};
+
+  if(Array.isArray(e)){
+    e.forEach(r => {
+      if(r && r.id && typeof r.explain === "string") expMap[r.id] = r.explain;
+    });
+  }else if(e && typeof e === "object"){
+    Object.entries(e).forEach(([k,v]) => {
+      if(typeof v === "string") expMap[k] = v;
+    });
+  }
+  state.explainMap = expMap;
 }
 
 // ✅ 정답/해설 getter (분리파일 우선, 없으면 bank.json fallback)
 function getAnswerFor(q){
   const v = state.answerMap?.[q.id];
   if(typeof v === "number") return v;
-  // fallback
   return (typeof q.answer === "number") ? q.answer : null;
 }
 function getExplainFor(q){
   const v = state.explainMap?.[q.id];
   if(typeof v === "string") return v;
-  // fallback
   return (typeof q.explain === "string") ? q.explain : "";
 }
 
@@ -107,7 +133,8 @@ function startTimer(){
   state.timerStart = Date.now();
   if(state.timerHandle) clearInterval(state.timerHandle);
   state.timerHandle = setInterval(() => {
-    $("#timerText").textContent = fmtTime(Date.now() - state.timerStart);
+    const el = $("#timerText");
+    if(el) el.textContent = fmtTime(Date.now() - state.timerStart);
   }, 250);
 }
 
@@ -123,6 +150,32 @@ function pickQuestions(subject, count){
   return shuffle(all).slice(0, n);
 }
 
+/* ✅ 해설 패널 (index.html에 #explainPanel, #explainMeta, #myPickText, #answerText, #explainText가 있을 때 동작) */
+function hideExplainPanel(){
+  const p = $("#explainPanel");
+  if(p) p.classList.add("hidden");
+}
+function showExplainPanel(q){
+  const p = $("#explainPanel");
+  if(!p) return;
+
+  const sel = state.answers[q.id] ?? null;
+  const ans = getAnswerFor(q);
+  const exp = getExplainFor(q);
+
+  const meta = $("#explainMeta");
+  const myPick = $("#myPickText");
+  const answerText = $("#answerText");
+  const expText = $("#explainText");
+
+  if(meta) meta.textContent = `${q.subject} / ${q.session}회 / ${q.no}번`;
+  if(myPick) myPick.textContent = (sel === null) ? "-" : `${sel}번`;
+  if(answerText) answerText.textContent = (typeof ans === "number") ? `${ans}번` : "-";
+  if(expText) expText.textContent = exp ? exp : "해설 데이터가 아직 없습니다.";
+
+  p.classList.remove("hidden");
+}
+
 /** crop 렌더링 */
 function renderQuestion(){
   const q = state.quizItems[state.idx];
@@ -132,6 +185,9 @@ function renderQuestion(){
   $("#qStatus").textContent = "풀이";
   $("#qMeta").textContent = `${q.subject} / ${q.session}회`;
   $("#progressText").textContent = `${state.idx + 1}/${state.quizItems.length}`;
+
+  // 문제 바뀌면 해설은 접기(채점 누르면 다시 열림)
+  hideExplainPanel();
 
   // 이미지 스택
   const stack = $("#qImageStack");
@@ -191,8 +247,6 @@ function renderQuestion(){
 
 function paintGrade(q){
   const sel = state.answers[q.id] ?? null;
-
-  // ✅ 분리파일 우선 정답
   const ans = getAnswerFor(q);
 
   $$("#choiceDots .dot").forEach(btn => {
@@ -212,13 +266,8 @@ function paintGrade(q){
     else toast(sel === ans ? "정답!" : "오답");
   }
 
-  // ✅ 해설(있으면 표시) - UI에 해설 영역이 있을 때만
-  const exp = getExplainFor(q);
-  const expEl = $("#explainText");
-  if(expEl){
-    expEl.textContent = exp ? exp : "";
-    expEl.classList.toggle("hidden", !exp);
-  }
+  // 채점 누르면 해설 패널 자동 펼침
+  showExplainPanel(q);
 }
 
 function nextQuestion(){
@@ -228,7 +277,7 @@ function nextQuestion(){
     return;
   }
   stopTimer();
-  toast("끝! (정답/해설 세팅 후 점수화 가능)");
+  toast("끝!");
 }
 
 function resetAll(){
@@ -238,17 +287,18 @@ function resetAll(){
   state.idx = 0;
   state.answers = {};
   state.graded = {};
-  $("#timerText").textContent = "00:00";
-  const expEl = $("#explainText");
-  if(expEl){
-    expEl.textContent = "";
-    expEl.classList.add("hidden");
-  }
+  const t = $("#timerText");
+  if(t) t.textContent = "00:00";
+  hideExplainPanel();
   showScreen("home");
 }
 
-function openSheet(){ $("#sheet").classList.remove("hidden"); }
-function closeSheet(){ $("#sheet").classList.add("hidden"); }
+function openSheet(){
+  $("#sheet").classList.remove("hidden");
+}
+function closeSheet(){
+  $("#sheet").classList.add("hidden");
+}
 
 async function init(){
   showScreen("home");
@@ -296,13 +346,7 @@ async function init(){
     state.idx = 0;
     state.answers = {};
     state.graded = {};
-
-    // 해설영역 초기화
-    const expEl = $("#explainText");
-    if(expEl){
-      expEl.textContent = "";
-      expEl.classList.add("hidden");
-    }
+    hideExplainPanel();
 
     showScreen("quiz");
     startTimer();
@@ -320,8 +364,10 @@ async function init(){
     });
   });
 
+  // 다음
   $("#btnNext").addEventListener("click", nextQuestion);
 
+  // 채점
   $("#btnGrade").addEventListener("click", () => {
     const q = state.quizItems[state.idx];
     if(!q) return;
@@ -329,12 +375,20 @@ async function init(){
     paintGrade(q);
   });
 
+  // 해설 접기 버튼
+  const btnHide = $("#btnHideExplain");
+  if(btnHide){
+    btnHide.addEventListener("click", hideExplainPanel);
+  }
+
+  // 나가기(홈으로)
   $("#btnExit").addEventListener("click", () => {
     if(confirm("나가면 풀이 기록이 초기화됩니다. 나갈까요?")){
       resetAll();
     }
   });
 
+  // 메뉴
   $("#btnMenu").addEventListener("click", openSheet);
   $("#btnCloseSheet").addEventListener("click", closeSheet);
   $("#sheet").addEventListener("click", (e) => {
@@ -348,7 +402,7 @@ async function init(){
     }
   });
 
-  // 키보드(PC)
+  // 키보드(PC 편의)
   window.addEventListener("keydown", (e) => {
     if(SCREENS.quiz.classList.contains("hidden")) return;
 
