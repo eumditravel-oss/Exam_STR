@@ -193,7 +193,7 @@ function renderQuestion(){
   const stack = $("#qImageStack");
   stack.innerHTML = "";
 
-  const parts = Array.isArray(q.parts) && q.parts.length ? q.parts : [];
+    const parts = Array.isArray(q.parts) && q.parts.length ? q.parts : [];
   parts.forEach((p, pidx) => {
     const card = document.createElement("div");
     card.className = "crop-card";
@@ -201,23 +201,25 @@ function renderQuestion(){
     const box = document.createElement("div");
     box.className = "crop-box";
 
-    const img = document.createElement("div");
-    img.className = "crop-img";
+    const img = document.createElement("img");
+    img.className = "crop-img-el";
+    img.alt = `${q.no}번 part ${pidx+1}`;
+    img.src = p.pageImage;
 
-    const src = p.pageImage;
-    img.style.backgroundImage = `url("${src}")`;
+    // ✅ crop이 있으면: 픽셀 기준으로 정확히 잘라서 보이게
+    if (p.crop && typeof p.crop.x === "number") {
+      // crop 데이터 저장(리사이즈 대응)
+      box.dataset.crop = JSON.stringify(p.crop);
 
-    if(p.crop && typeof p.crop.x === "number"){
-      const bx = p.crop.x, by = p.crop.y, bw = p.crop.w, bh = p.crop.h;
-      const scaleX = 1 / Math.max(0.0001, bw);
-      const scaleY = 1 / Math.max(0.0001, bh);
-
-      img.style.backgroundSize = `${scaleX*100}% ${scaleY*100}%`;
-      img.style.backgroundPosition = `${(-bx/(bw))*100}% ${(-by/(bh))*100}%`;
-    }else{
-      img.style.backgroundSize = "contain";
-      img.style.backgroundPosition = "center";
-      img.style.backgroundColor = "#fff";
+      img.addEventListener("load", () => {
+        applyCrop(box, img);
+      });
+    } else {
+      // crop 미설정: 전체 이미지(contain 느낌)
+      img.style.position = "relative";
+      img.style.width = "100%";
+      img.style.height = "100%";
+      img.style.objectFit = "contain";
     }
 
     box.appendChild(img);
@@ -230,6 +232,37 @@ function renderQuestion(){
     card.appendChild(note);
     stack.appendChild(card);
   });
+
+   function applyCrop(box, img){
+  const crop = JSON.parse(box.dataset.crop || "null");
+  if(!crop) return;
+
+  // box 실제 폭 기준으로 스케일 계산
+  const boxW = box.clientWidth || 1;
+  const scale = boxW / crop.w;
+
+  // 이미지 원본 크기
+  const iw = img.naturalWidth || 1;
+  const ih = img.naturalHeight || 1;
+
+  // crop 영역이 box에 꽉 차도록: 이미지 자체를 확대/이동
+  img.style.position = "absolute";
+  img.style.left = (-crop.x * scale) + "px";
+  img.style.top  = (-crop.y * scale) + "px";
+  img.style.width  = (iw * scale) + "px";
+  img.style.height = (ih * scale) + "px";
+}
+
+function reapplyAllCrops(){
+  document.querySelectorAll(".crop-box").forEach(box=>{
+    const img = box.querySelector("img.crop-img-el");
+    if(!img) return;
+    if(box.dataset.crop){
+      applyCrop(box, img);
+    }
+  });
+}
+
 
   // 선택 표시
   const selected = state.answers[q.id] ?? null;
@@ -302,6 +335,11 @@ function closeSheet(){
 
 async function init(){
   showScreen("home");
+
+   window.addEventListener("resize", () => {
+  reapplyAllCrops();
+});
+
 
   // 1) bank 로드(필수)
   try{
