@@ -352,3 +352,75 @@ body{
   max-width: 86vw;
   text-align:center;
 }
+
+
+/* ✅ Explain Panel */
+.explain-panel{
+  margin-top: 12px;
+  border: 1px solid rgba(0,0,0,.08);
+  border-radius: 14px;
+  background: rgba(255,255,255,.92);
+  box-shadow: 0 10px 26px rgba(0,0,0,.06);
+  padding: 12px 12px 10px;
+}
+
+.explain-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom: 8px;
+}
+
+.explain-title{
+  font-weight: 900;
+  font-size: 15px;
+  letter-spacing: -0.2px;
+}
+
+.explain-meta{
+  font-size: 12px;
+  color: rgba(0,0,0,.55);
+  white-space: nowrap;
+}
+
+.explain-body{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.explain-row{
+  display:flex;
+  gap:10px;
+  align-items:baseline;
+  font-size: 13px;
+}
+.explain-row .label{
+  width: 64px;
+  color: rgba(0,0,0,.55);
+  font-weight: 700;
+}
+.explain-row .value{
+  font-weight: 900;
+}
+
+.explain-text{
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(0,0,0,.10);
+}
+
+.btn-ghost{
+  margin-top: 10px;
+  width: 100%;
+  border: 1px solid rgba(0,0,0,.10);
+  background: rgba(255,255,255,.7);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-weight: 800;
+}
+.btn-ghost:active{ transform: scale(.99); }
+
