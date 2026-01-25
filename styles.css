@@ -222,20 +222,13 @@ body{
 .crop-box{
   width:100%;
   position:relative;
+  overflow:hidden;          /* ✅ 핵심 */
   background:#f7f6f3;
+  height: 520px;            /* ✅ 원하는 표시 높이(420~620 추천) */
 }
-.crop-box::after{
-  content:"";
-  display:block;
-  padding-bottom: 56%;
-}
-.crop-img{
-  position:absolute;
-  inset:0;
-  background-repeat:no-repeat;
-  background-position: center;
-  background-size: cover;
-}
+.crop-box::after{ display:none; }  /* ✅ 기존 비율박스 트릭 제거 */
+
+
 .crop-note{
   padding: 10px 12px;
   border-top: 1px solid rgba(0,0,0,.06);
@@ -423,4 +416,12 @@ body{
   font-weight: 800;
 }
 .btn-ghost:active{ transform: scale(.99); }
+
+
+.crop-img-el{
+  display:block;
+  user-select:none;
+  -webkit-user-drag:none;
+}
+
 
