@@ -1,6 +1,7 @@
 /* app.js - Random Quiz (finish → results)
    - 풀이 중 정답/해설/채점 기능 노출 X
    - 마지막까지 다 풀면 결과 화면에서 오답 + 정답/해설 제공
+   - ✅ 오답만 다시 풀기(오답 재시험) 추가
    - ✅ crop: px / 0~1 정규화 자동 인식
 */
 
@@ -242,14 +243,11 @@ function renderQuestion(){
   $("#qMeta").textContent = `${q.subject} / ${q.session}회`;
   $("#progressText").textContent = `${state.idx + 1}/${state.quizItems.length}`;
 
-  // 마지막 문제면 다음 버튼을 "결과"로 표시
   const isLast = state.idx === state.quizItems.length - 1;
   $("#btnNext").textContent = isLast ? "결과" : "›";
 
-  // 문제 이미지
   renderPartsInto($("#qImageStack"), q);
 
-  // 선택 표시만
   const selected = state.answers[q.id] ?? null;
   $$("#choiceDots .dot").forEach(btn => {
     const c = Number(btn.dataset.choice);
@@ -264,17 +262,16 @@ function nextStep(){
     renderQuestion();
     return;
   }
-
-  // ✅ 마지막이면 결과 화면으로
   stopTimer();
   renderResults();
   showScreen("result");
 }
 
-/* ===== 결과 화면 ===== */
+/* ===== 결과/오답 재시험 ===== */
 function computeResult(){
   const total = state.quizItems.length;
   let correct = 0;
+
   const rows = state.quizItems.map(q => {
     const my = state.answers[q.id] ?? null;
     const ans = getAnswerFor(q); // null 가능
@@ -285,6 +282,18 @@ function computeResult(){
 
   const wrong = rows.filter(r => !r.ok);
   return { total, correct, wrongCount: total - correct, rows, wrong };
+}
+
+function startQuizWith(items){
+  // items: 문제 객체 배열
+  state.quizItems = items.slice();
+  state.idx = 0;
+  state.answers = {};
+  state.showOnlyWrong = true;
+
+  showScreen("quiz");
+  startTimer();
+  renderQuestion();
 }
 
 function renderResults(){
@@ -335,7 +344,6 @@ function renderResults(){
     const body = document.createElement("div");
     body.className = "wrong-body";
 
-    // 이미지(문제 영역 그대로)
     const imgWrap = document.createElement("div");
     renderPartsInto(imgWrap, q);
 
@@ -363,17 +371,15 @@ function renderResults(){
     list.appendChild(card);
   });
 
-  // 결과 화면에서 crop 재적용(이미지 로드 타이밍 보정)
   setTimeout(reapplyAllCrops, 80);
 }
-/* ===================== */
+/* ========================= */
 
 async function init(){
   showScreen("home");
 
   window.addEventListener("resize", () => reapplyAllCrops());
 
-  // 1) bank 필수
   try{
     await loadBank();
   }catch(e){
@@ -381,10 +387,8 @@ async function init(){
     return;
   }
 
-  // 2) answers/explanations 선택
   await loadAnswerAndExplain();
 
-  // HOME: 과목 선택
   $$(".subject-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       if(btn.disabled) return;
@@ -404,24 +408,17 @@ async function init(){
 
   $("#btnBackHome").addEventListener("click", () => showScreen("home"));
 
-  // 시작
   $("#btnStart").addEventListener("click", () => {
     if(!state.subject) return;
 
     const total = state.bank.filter(q => q.subject === state.subject).length;
     const n = Math.max(1, Math.min(Number($("#countInput").value || 1), total || 1));
 
-    state.quizItems = pickQuestions(state.subject, n);
-    state.idx = 0;
-    state.answers = {};
-    state.showOnlyWrong = true;
-
-    showScreen("quiz");
-    startTimer();
-    renderQuestion();
+    const items = pickQuestions(state.subject, n);
+    startQuizWith(items);
   });
 
-  // QUIZ: 선택 (풀이 중엔 정답/해설 노출 X)
+  // 선택
   $$("#choiceDots .dot").forEach(btn => {
     btn.addEventListener("click", () => {
       const q = state.quizItems[state.idx];
@@ -432,21 +429,17 @@ async function init(){
     });
   });
 
-  // 다음(마지막이면 결과)
+  // 다음/결과
   $("#btnNext").addEventListener("click", () => {
-    // 마지막에서 미선택이면 경고만(원하면 강제 선택도 가능)
     const q = state.quizItems[state.idx];
-    const isLast = state.idx === state.quizItems.length - 1;
     const my = state.answers[q.id] ?? null;
     if(my === null){
       toast("선택하지 않았습니다. 그대로 진행할까요?");
-      // 한번 더 누르면 넘어가게 하려면 아래 주석 해제하고 flag 쓰면 됨
-      // (지금은 바로 진행 가능하게 유지)
     }
     nextStep();
   });
 
-  // 나가기(초기화)
+  // 나가기
   $("#btnExit").addEventListener("click", () => {
     if(confirm("나가면 풀이 기록이 초기화됩니다. 나갈까요?")){
       resetAll();
@@ -467,36 +460,48 @@ async function init(){
     }
   });
 
-  // RESULT 버튼들
+  // RESULT
   $("#btnResultHome").addEventListener("click", () => resetAll());
+
   $("#btnRetry").addEventListener("click", () => {
-    // 같은 과목/같은 개수로 재시작
+    // 같은 과목/같은 개수로 "새 랜덤" 재시작
     const subj = state.subject;
     const count = state.quizItems.length || 20;
     if(!subj){
       resetAll();
       return;
     }
-    state.quizItems = pickQuestions(subj, count);
-    state.idx = 0;
-    state.answers = {};
-    state.showOnlyWrong = true;
-
-    showScreen("quiz");
-    startTimer();
-    renderQuestion();
+    const items = pickQuestions(subj, count);
+    startQuizWith(items);
   });
 
   $("#btnOnlyWrong").addEventListener("click", () => {
     state.showOnlyWrong = true;
     renderResults();
   });
+
   $("#btnAllList").addEventListener("click", () => {
     state.showOnlyWrong = false;
     renderResults();
   });
 
-  // 키보드 (선택/다음)
+  // ✅ 오답만 다시 풀기
+  $("#btnRetryWrong").addEventListener("click", () => {
+    const { wrong } = computeResult();
+    const wrongQs = wrong.map(r => r.q);
+
+    if(!wrongQs.length){
+      alert("오답이 없습니다. 👍");
+      return;
+    }
+
+    if(!confirm(`오답 ${wrongQs.length}문항만 다시 풀까요?`)) return;
+
+    // 오답만 그대로 순서 유지(원하면 shuffle(wrongQs)로 바꿀 수 있음)
+    startQuizWith(wrongQs);
+  });
+
+  // 키보드
   window.addEventListener("keydown", (e) => {
     if(SCREENS.quiz.classList.contains("hidden")) return;
 
