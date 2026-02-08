@@ -3,139 +3,87 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>기출문제 랜덤 풀이</title>
-  <link rel="stylesheet" href="styles.css?v=5" />
+  <title>기출문제 랜덤 풀이 (TXT)</title>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <!-- HOME -->
-  <section id="home" class="screen">
-    <div class="home-wrap">
-      <div class="home-card">
-        <div class="home-title">기출문제 랜덤 풀이</div>
-        <div class="home-sub">과목 선택 → 랜덤 문항 수 선택 → 풀이 → 결과</div>
-
-        <div class="subject-grid">
-          <button class="subject-btn" data-subject="재무회계">1. 재무회계</button>
-          <button class="subject-btn disabled" data-subject="원가관리회계" disabled>2. 원가관리회계 (준비중)</button>
-          <button class="subject-btn disabled" data-subject="제조원가실무" disabled>3. 제조원가실무 (준비중)</button>
-          <button class="subject-btn disabled" data-subject="공사기타원가회계" disabled>4. 공사기타원가회계 (준비중)</button>
-          <button class="subject-btn disabled" data-subject="제도및법규" disabled>5. 제도및법규 (준비중)</button>
-        </div>
-
-        <div class="home-foot">
-          <a class="link" href="editor.html">좌표 찍기 도구 열기(editor.html)</a>
-        </div>
-      </div>
+  <header class="topbar">
+    <div class="brand">
+      <div class="title">기출문제 랜덤 풀이 (TXT)</div>
+      <div class="sub">과목/회차 선택 → 랜덤 풀이 → 채점 → 오답노트 다운로드</div>
     </div>
-  </section>
+  </header>
 
-  <!-- PICK COUNT -->
-  <section id="pick" class="screen hidden">
-    <div class="pick-wrap">
-      <div class="pick-card">
-        <div class="pick-title" id="pickTitle">과목 선택</div>
-        <div class="pick-sub">전체 문제 중 몇 문제를 랜덤으로 풀까요?</div>
+  <!-- HOME -->
+  <section id="screen-home" class="screen">
+    <div class="card">
+      <div class="card-title">1) 과목 선택</div>
+      <div id="subjectGrid" class="grid"></div>
+    </div>
 
-        <div class="pick-row">
-          <input id="countInput" type="number" min="1" value="20" />
-          <button id="btnStart" class="btn primary">시작</button>
-        </div>
+    <div class="card">
+      <div class="card-title">2) 회차 선택</div>
+      <div id="roundGrid" class="grid"></div>
+    </div>
 
-        <div class="pick-hint" id="pickHint">문항 수를 불러오는 중...</div>
-
-        <div class="pick-actions">
-          <button id="btnBackHome" class="btn">← 과목 다시 선택</button>
-        </div>
+    <div class="card">
+      <div class="card-title">3) 문항 수</div>
+      <div class="row">
+        <input id="countInput" type="number" min="1" value="20" />
+        <button id="btnStart" class="btn primary">랜덤으로 풀기 시작</button>
       </div>
+      <div id="homeHint" class="hint"></div>
     </div>
   </section>
 
   <!-- QUIZ -->
-  <section id="quiz" class="screen hidden">
-    <header class="topbar">
-      <button id="btnExit" class="icon-btn" title="나가기">✕</button>
-      <button id="btnMenu" class="icon-btn" title="메뉴">⋯</button>
+  <section id="screen-quiz" class="screen hidden">
+    <div class="card">
+      <div id="meta" class="meta"></div>
 
-      <div class="timer-pill">
-        <span id="timerText">00:00</span>
-        <span class="timer-ico" aria-hidden="true">⏱</span>
+      <div class="block">
+        <div class="block-title">문제</div>
+        <div id="qText" class="pre"></div>
       </div>
 
-      <!-- ✅ 풀이중엔 채점/해설 없음 -->
-      <div class="topbar-right-spacer"></div>
-    </header>
+      <div class="block hidden" id="exBlock">
+        <div class="block-title">예제/자료</div>
+        <div id="exText" class="pre"></div>
+      </div>
 
-    <main class="quiz-main">
-      <div class="q-head">
-        <div class="q-title">
-          <span id="qNo">1번</span>
-          <span class="q-sep">·</span>
-          <span id="qStatus">풀이</span>
+      <div class="block hidden" id="tableBlock">
+        <div class="block-title">표</div>
+        <div id="tableHost" class="pre"></div>
+      </div>
+
+      <div class="block">
+        <div class="block-title">답안 입력</div>
+        <div id="answerArea"></div>
+      </div>
+
+      <div class="row" style="justify-content: space-between;">
+        <button id="btnQuit" class="btn">그만하기</button>
+        <div class="row">
+          <button id="btnNext" class="btn">다음문제</button>
+          <button id="btnSubmit" class="btn primary hidden">정답제출</button>
         </div>
-        <div class="q-meta" id="qMeta">재무회계 / 10회</div>
-      </div>
-
-      <div id="qImageStack" class="q-image-stack"></div>
-
-      <div class="spacer"></div>
-    </main>
-
-    <footer class="bottombar">
-      <div class="progress">
-        <span id="progressText">1/20</span>
-      </div>
-
-      <div class="choice-dots" id="choiceDots">
-        <button class="dot" data-choice="1">1</button>
-        <button class="dot" data-choice="2">2</button>
-        <button class="dot" data-choice="3">3</button>
-        <button class="dot" data-choice="4">4</button>
-      </div>
-
-      <button id="btnNext" class="next-btn" title="다음">›</button>
-    </footer>
-
-    <!-- MENU SHEET -->
-    <div id="sheet" class="sheet hidden">
-      <div class="sheet-card">
-        <div class="sheet-title">메뉴</div>
-        <button id="btnReset" class="sheet-item">처음부터 다시</button>
-        <button id="btnCloseSheet" class="sheet-item">닫기</button>
       </div>
     </div>
-
-    <!-- TOAST -->
-    <div id="toast" class="toast hidden"></div>
   </section>
 
   <!-- RESULT -->
-  <section id="result" class="screen hidden">
-    <header class="topbar">
-      <button id="btnResultHome" class="icon-btn" title="홈">⌂</button>
-      <div class="timer-pill">
-        <span id="resultTitle">결과</span>
+  <section id="screen-result" class="screen hidden">
+    <div class="card">
+      <div class="card-title">결과</div>
+      <div id="scoreText" class="score"></div>
+      <div class="row">
+        <button id="btnDownloadWrong" class="btn primary">오답노트 다운로드(txt)</button>
+        <button id="btnBackHome" class="btn">처음으로</button>
       </div>
-      <button id="btnRetry" class="icon-btn" title="다시">↻</button>
-    </header>
-
-    <main class="result-main">
-      <div class="result-card">
-        <div class="result-score">
-          <div class="big" id="scoreText">-</div>
-          <div class="sub" id="scoreMeta">-</div>
-        </div>
-
-        <div class="result-actions">
-          <button id="btnOnlyWrong" class="btn primary">오답만 보기</button>
-          <button id="btnAllList" class="btn">전체 보기</button>
-          <button id="btnRetryWrong" class="btn">오답만 다시 풀기</button>
-        </div>
-      </div>
-
-      <div id="resultList" class="result-list"></div>
-    </main>
+      <div id="resultHint" class="hint"></div>
+    </div>
   </section>
 
-  <script src="app.js?v=5"></script>
+  <script src="app.js"></script>
 </body>
 </html>
