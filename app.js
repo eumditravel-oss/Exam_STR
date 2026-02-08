@@ -1,524 +1,452 @@
-/* app.js - Random Quiz (finish → results)
-   - 풀이 중 정답/해설/채점 기능 노출 X
-   - 마지막까지 다 풀면 결과 화면에서 오답 + 정답/해설 제공
-   - ✅ 오답만 다시 풀기(오답 재시험) 추가
-   - ✅ crop: px / 0~1 정규화 자동 인식
-   - ✅ FIX: crop-box height를 minH로 강제하지 않고 crop.h에 정확히 맞춤
-*/
+"use strict";
 
-const $ = (sel) => document.querySelector(sel);
-const $$ = (sel) => Array.from(document.querySelectorAll(sel));
-
-const SCREENS = {
-  home: $("#home"),
-  pick: $("#pick"),
-  quiz: $("#quiz"),
-  result: $("#result"),
-};
-
-const state = {
-  subject: null,
-  bank: [],
-
-  answerMap: {},
-  explainMap: {},
-
-  quizItems: [],
-  idx: 0,
-  answers: {},
-  timerStart: null,
-  timerHandle: null,
-
-  showOnlyWrong: true,
-};
-
-function showScreen(name){
-  Object.entries(SCREENS).forEach(([k, el]) => {
-    el.classList.toggle("hidden", k !== name);
-  });
+/** ---------- DOM ---------- **/
+const $ = (id) => document.getElementById(id);
+const show = (id) => $(id).classList.remove("hidden");
+const hide = (id) => $(id).classList.add("hidden");
+function go(screenId){
+  ["screen-home","screen-quiz","screen-result"].forEach(hide);
+  show(screenId);
 }
 
-function toast(msg){
-  const el = $("#toast");
-  if(!el) return;
-  el.textContent = msg;
-  el.classList.remove("hidden");
-  clearTimeout(el._t);
-  el._t = setTimeout(() => el.classList.add("hidden"), 1600);
-}
+/** ---------- State ---------- **/
+let manifest = null;
 
-async function loadJsonOptional(url){
-  try{
-    const res = await fetch(url + (url.includes("?") ? "&" : "?") + "v=" + Date.now());
-    if(!res.ok) return null;
-    return await res.json();
-  }catch(e){
-    return null;
-  }
-}
+let selectedSubject = null;
+let selectedRound = null;
 
-async function loadBank(){
-  const res = await fetch("data/bank.json?v=" + Date.now());
-  if(!res.ok) throw new Error("bank.json 로드 실패");
-  const data = await res.json();
-  state.bank = Array.isArray(data) ? data : [];
-}
+let qItems = [];           // parsed questions for chosen round+subject
+let aMap = new Map();      // CODE => { ans, expl }
 
-async function loadAnswerAndExplain(){
-  const a = await loadJsonOptional("data/answers.json");
-  const ansMap = {};
-  if(Array.isArray(a)){
-    a.forEach(r => { if(r?.id && typeof r.answer === "number") ansMap[r.id] = r.answer; });
-  }else if(a && typeof a === "object"){
-    Object.entries(a).forEach(([k,v]) => { if(typeof v === "number") ansMap[k] = v; });
-  }
-  state.answerMap = ansMap;
+let quiz = [];             // selected N questions
+let idx = 0;
+let userAns = new Map();   // CODE => userAnswer
 
-  const e = await loadJsonOptional("data/explanations.json");
-  const expMap = {};
-  if(Array.isArray(e)){
-    e.forEach(r => { if(r?.id && typeof r.explain === "string") expMap[r.id] = r.explain; });
-  }else if(e && typeof e === "object"){
-    Object.entries(e).forEach(([k,v]) => { if(typeof v === "string") expMap[k] = v; });
-  }
-  state.explainMap = expMap;
-}
+let wrongNoteText = "";
 
-function getAnswerFor(q){
-  const v = state.answerMap?.[q.id];
-  if(typeof v === "number") return v;
-  return (typeof q.answer === "number") ? q.answer : null;
-}
-function getExplainFor(q){
-  const v = state.explainMap?.[q.id];
-  if(typeof v === "string") return v;
-  return (typeof q.explain === "string") ? q.explain : "";
-}
-
+/** ---------- Utils ---------- **/
 function shuffle(arr){
   const a = arr.slice();
-  for(let i=a.length-1; i>0; i--){
+  for(let i=a.length-1;i>0;i--){
     const j = Math.floor(Math.random()*(i+1));
-    [a[i], a[j]] = [a[j], a[i]];
+    [a[i],a[j]] = [a[j],a[i]];
   }
   return a;
 }
 
-function fmtTime(ms){
-  const sec = Math.max(0, Math.floor(ms/1000));
-  const m = Math.floor(sec/60);
-  const s = sec % 60;
-  return `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+function downloadTxt(filename, text){
+  const blob = new Blob([text], {type:"text/plain;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
-function startTimer(){
-  state.timerStart = Date.now();
-  if(state.timerHandle) clearInterval(state.timerHandle);
-  state.timerHandle = setInterval(() => {
-    const el = $("#timerText");
-    if(el) el.textContent = fmtTime(Date.now() - state.timerStart);
-  }, 250);
-}
+/** ---------- TXT Parser ---------- **/
+/**
+ * Record format:
+ * @@@
+ * KEY: value
+ * Q:
+ * multi line...
+ * EX:
+ * ...
+ * ---
+ */
+function parseRecords(txt){
+  // Normalize newlines
+  const t = txt.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 
-function stopTimer(){
-  if(state.timerHandle) clearInterval(state.timerHandle);
-  state.timerHandle = null;
-}
+  // Split by record start marker
+  const parts = t.split("\n@@@\n").map(s => s.trim()).filter(Boolean);
 
-/* ===== Crop Utils (px / norm) ===== */
-function isNormalizedCrop(c){
-  if(!c) return false;
-  const vals = [c.x, c.y, c.w, c.h];
-  if(vals.some(v => typeof v !== "number")) return false;
-  return vals.every(v => v >= -0.001 && v <= 1.001);
-}
-function toPixelCrop(crop, iw, ih){
-  if(!crop) return null;
-  if(isNormalizedCrop(crop)){
-    return { x: crop.x*iw, y: crop.y*ih, w: crop.w*iw, h: crop.h*ih };
+  const recs = [];
+  for(const part of parts){
+    // Ensure end marker exists; but tolerate missing trailing ---
+    const body = part.replace(/\n---\s*$/g, "").trim();
+
+    // Parse fields with block sections (Q/EX/TABLE/CHOICES/EXPL)
+    const rec = {};
+    const lines = body.split("\n");
+
+    let curKey = null;
+    let buf = [];
+
+    function flush(){
+      if(curKey){
+        rec[curKey] = buf.join("\n").trimEnd();
+      }
+      curKey = null;
+      buf = [];
+    }
+
+    for(const line of lines){
+      // Block section start like "Q:" exactly
+      if (/^(Q|EX|TABLE|CHOICES|EXPL):\s*$/.test(line)){
+        flush();
+        curKey = line.replace(":",""); // Q, EX, ...
+        buf = [];
+        continue;
+      }
+
+      // Normal KV like "CODE: xxx"
+      const m = line.match(/^([A-Z_]+):\s*(.*)$/);
+      if(m && !curKey){
+        rec[m[1]] = m[2].trim();
+        continue;
+      }
+
+      // Block content line
+      if(curKey){
+        buf.push(line);
+      } else {
+        // tolerate stray lines (append to a RAW bucket)
+        rec.RAW = (rec.RAW ? rec.RAW + "\n" : "") + line;
+      }
+    }
+    flush();
+
+    recs.push(rec);
   }
-  return { x: crop.x, y: crop.y, w: crop.w, h: crop.h };
+  return recs;
 }
 
-function applyCrop(box, img){
-  const raw = JSON.parse(box.dataset.crop || "null");
-  if(!raw) return;
-
-  const iw = img.naturalWidth || 1;
-  const ih = img.naturalHeight || 1;
-  const c = toPixelCrop(raw, iw, ih);
-  if(!c || !isFinite(c.w) || !isFinite(c.h) || c.w <= 0 || c.h <= 0) return;
-
-  const boxW = box.clientWidth || 1;
-  const scale = boxW / c.w;
-
-  // ✅ 핵심 FIX: minH 강제로 키우지 말고 crop.h에 맞춰 정확히 자르기
-  const maxH = 1200; // 너무 큰 크롭만 제한
-  const targetH = Math.max(10, Math.min(c.h * scale, maxH));
-  box.style.height = `${Math.round(targetH)}px`;
-
-  img.style.position = "absolute";
-  img.style.left = (-c.x * scale) + "px";
-  img.style.top  = (-c.y * scale) + "px";
-  img.style.width  = (iw * scale) + "px";
-  img.style.height = (ih * scale) + "px";
+/** ---------- Loaders ---------- **/
+async function loadManifest(){
+  const res = await fetch("data/manifest.json", {cache:"no-store"});
+  if(!res.ok) throw new Error("manifest.json 로드 실패");
+  return await res.json();
 }
 
-function renderPartsInto(container, q){
-  container.innerHTML = "";
-  const parts = Array.isArray(q.parts) && q.parts.length ? q.parts : [];
+function findFile(round, subject){
+  const hit = (manifest.files || []).find(f => f.round === round && f.subject === subject);
+  return hit || null;
+}
 
-  parts.forEach((p, pidx) => {
-    const card = document.createElement("div");
-    card.className = "crop-card";
+async function loadQA(round, subject){
+  const file = findFile(round, subject);
+  if(!file) throw new Error("선택한 회차/과목 파일이 없습니다.");
 
-    const box = document.createElement("div");
-    box.className = "crop-box";
+  const [qRes, aRes] = await Promise.all([
+    fetch(file.q, {cache:"no-store"}),
+    fetch(file.a, {cache:"no-store"})
+  ]);
 
-    const img = document.createElement("img");
-    img.className = "crop-img-el";
-    img.alt = `${q.no}번 part ${pidx+1}`;
-    img.src = p.pageImage;
+  if(!qRes.ok) throw new Error("문제 TXT 로드 실패");
+  if(!aRes.ok) throw new Error("답안 TXT 로드 실패");
 
-    if(p.crop && typeof p.crop.x === "number"){
-      box.dataset.crop = JSON.stringify(p.crop);
+  const [qTxt, aTxt] = await Promise.all([qRes.text(), aRes.text()]);
 
-      img.addEventListener("load", () => {
-        // ✅ 레이아웃이 아직 덜 잡힌 경우가 있어 한 프레임(필요시 두 프레임) 뒤에 적용
-        requestAnimationFrame(() => {
-          applyCrop(box, img);
-          requestAnimationFrame(() => applyCrop(box, img));
-        });
-      });
-    }else{
-      box.style.height = "260px";
-      img.style.position = "relative";
-      img.style.width = "100%";
-      img.style.height = "100%";
-      img.style.objectFit = "contain";
+  // Parse questions
+  const qRecs = parseRecords("\n@@@\n" + qTxt.trim() + "\n");
+  qItems = qRecs.map(r => ({
+    code: r.CODE,
+    round: Number(r.ROUND),
+    subject: r.SUBJECT,
+    no: Number(r.NO),
+    type: (r.TYPE || "").toUpperCase(), // MCQ / SA
+    point: r.POINT ? Number(r.POINT) : null,
+    q: r.Q || "",
+    ex: r.EX || "",
+    table: r.TABLE || "",
+    choicesRaw: r.CHOICES || ""
+  }));
+
+  // Parse answers
+  const aRecs = parseRecords("\n@@@\n" + aTxt.trim() + "\n");
+  aMap = new Map();
+  aRecs.forEach(r => {
+    const code = r.CODE;
+    if(!code) return;
+    aMap.set(code, {
+      ans: (r.ANS ?? "").toString().trim(),
+      expl: (r.EXPL ?? "").toString().trim()
+    });
+  });
+
+  // Sanity: only keep questions that have answers (optional policy)
+  // qItems = qItems.filter(q => aMap.has(q.code));
+}
+
+/** ---------- UI Builders ---------- **/
+function renderHome(){
+  // Subjects
+  const sg = $("subjectGrid");
+  sg.innerHTML = "";
+  (manifest.subjects || []).forEach(sub => {
+    const b = document.createElement("button");
+    b.className = "chip";
+    b.textContent = sub;
+    b.onclick = () => {
+      selectedSubject = sub;
+      [...sg.querySelectorAll(".chip")].forEach(x => x.classList.toggle("on", x === b));
+      renderRoundGrid(); // apply availability filter
+      updateHomeHint();
+    };
+    sg.appendChild(b);
+  });
+
+  // Rounds
+  renderRoundGrid();
+  updateHomeHint();
+}
+
+function renderRoundGrid(){
+  const rg = $("roundGrid");
+  rg.innerHTML = "";
+
+  const rounds = manifest.rounds || [];
+  rounds.forEach(r => {
+    const b = document.createElement("button");
+    b.className = "chip";
+    b.textContent = `${r}회`;
+
+    // disable if subject selected but file missing
+    if(selectedSubject){
+      const has = !!findFile(r, selectedSubject);
+      if(!has) b.classList.add("disabled");
     }
 
-    box.appendChild(img);
+    b.onclick = () => {
+      selectedRound = r;
+      [...rg.querySelectorAll(".chip")].forEach(x => x.classList.toggle("on", x === b));
+      updateHomeHint();
+    };
 
-    const note = document.createElement("div");
-    note.className = "crop-note";
-    note.textContent = `part ${pidx+1}`;
-
-    card.appendChild(box);
-    card.appendChild(note);
-    container.appendChild(card);
+    rg.appendChild(b);
   });
 }
 
-function reapplyAllCrops(){
-  document.querySelectorAll(".crop-box").forEach(box=>{
-    const img = box.querySelector("img.crop-img-el");
-    if(!img) return;
-    if(img.complete && img.naturalWidth && box.dataset.crop){
-      applyCrop(box, img);
-    }
-  });
-}
-/* ================================ */
-
-function pickQuestions(subject, count){
-  const all = state.bank.filter(q => q.subject === subject);
-  const max = all.length;
-  const n = Math.max(1, Math.min(count, max || 1));
-  return shuffle(all).slice(0, n);
+function updateHomeHint(){
+  const hint = $("homeHint");
+  const ok = selectedSubject && selectedRound;
+  if(!ok){
+    hint.textContent = "과목과 회차를 선택하세요. (manifest.json의 files에 존재하는 조합만 활성화됩니다)";
+    return;
+  }
+  const file = findFile(selectedRound, selectedSubject);
+  hint.textContent = file
+    ? `선택됨: ${selectedRound}회 / ${selectedSubject}  ·  문제: ${file.q}  ·  답안: ${file.a}`
+    : "선택한 조합의 TXT 파일이 없습니다. manifest.json의 files에 등록하세요.";
 }
 
-function resetAll(){
-  stopTimer();
-  state.subject = null;
-  state.quizItems = [];
-  state.idx = 0;
-  state.answers = {};
-  state.showOnlyWrong = true;
-  const t = $("#timerText");
-  if(t) t.textContent = "00:00";
-  showScreen("home");
+/** ---------- Quiz Flow ---------- **/
+function buildQuiz(count){
+  const pool = qItems.slice().sort((a,b)=>a.no-b.no); // stable
+  const n = Math.min(count, pool.length);
+  quiz = shuffle(pool).slice(0, n);
+  idx = 0;
+  userAns = new Map();
 }
-
-function openSheet(){ $("#sheet").classList.remove("hidden"); }
-function closeSheet(){ $("#sheet").classList.add("hidden"); }
 
 function renderQuestion(){
-  const q = state.quizItems[state.idx];
-  if(!q) return;
+  const item = quiz[idx];
+  const total = quiz.length;
 
-  $("#qNo").textContent = `${q.no}번`;
-  $("#qStatus").textContent = "풀이";
-  $("#qMeta").textContent = `${q.subject} / ${q.session}회`;
-  $("#progressText").textContent = `${state.idx + 1}/${state.quizItems.length}`;
+  $("meta").textContent = `${idx+1} / ${total} · ${item.code}`;
 
-  const isLast = state.idx === state.quizItems.length - 1;
-  $("#btnNext").textContent = isLast ? "결과" : "›";
+  $("qText").textContent = item.q || "";
 
-  renderPartsInto($("#qImageStack"), q);
+  // EX
+  if((item.ex || "").trim()){
+    $("exText").textContent = item.ex;
+    show("exBlock");
+  } else {
+    hide("exBlock");
+  }
 
-  const selected = state.answers[q.id] ?? null;
-  $$("#choiceDots .dot").forEach(btn => {
-    const c = Number(btn.dataset.choice);
-    btn.classList.toggle("selected", selected === c);
+  // TABLE (MVP: 그대로 pre 표시. 추후 table 변환 가능)
+  if((item.table || "").trim()){
+    $("tableHost").textContent = item.table;
+    show("tableBlock");
+  } else {
+    hide("tableBlock");
+  }
+
+  // Answer area
+  const area = $("answerArea");
+  area.innerHTML = "";
+
+  const saved = userAns.get(item.code) ?? "";
+
+  const isMCQ = (item.type === "MCQ") || hasChoices(item.choicesRaw);
+  if(isMCQ){
+    const row = document.createElement("div");
+    row.className = "choiceRow";
+
+    const choices = parseChoices(item.choicesRaw);
+    // choices may be empty if only type=MCQ; still show 1~4 buttons
+    const opts = choices.length ? choices.map(c => c.no) : ["1","2","3","4"];
+
+    opts.forEach(v => {
+      const b = document.createElement("button");
+      b.className = "choiceBtn";
+      b.textContent = v;
+      b.onclick = () => {
+        userAns.set(item.code, v);
+        markChoice(row, v);
+      };
+      row.appendChild(b);
+    });
+
+    // show choices text if present
+    if(choices.length){
+      const box = document.createElement("div");
+      box.className = "pre";
+      box.textContent = choices.map(c => `${c.no}) ${c.text}`).join("\n");
+      area.appendChild(box);
+    }
+
+    area.appendChild(row);
+    if(saved) markChoice(row, saved);
+  } else {
+    const input = document.createElement("input");
+    input.type = "text";
+    input.placeholder = "정답 입력";
+    input.value = saved;
+    input.oninput = () => userAns.set(item.code, input.value);
+    area.appendChild(input);
+  }
+
+  // buttons
+  if(idx === total - 1){
+    hide("btnNext");
+    show("btnSubmit");
+  }else{
+    show("btnNext");
+    hide("btnSubmit");
+  }
+}
+
+function hasChoices(raw){
+  return /\b1\)\s*/.test(raw || "");
+}
+
+function parseChoices(raw){
+  const t = (raw || "").replace(/\r\n/g,"\n").replace(/\r/g,"\n").trim();
+  if(!t) return [];
+  const lines = t.split("\n").map(s=>s.trim()).filter(Boolean);
+
+  // Expect "1) ..." format
+  const out = [];
+  for(const line of lines){
+    const m = line.match(/^([1-4])\)\s*(.*)$/);
+    if(m) out.push({no:m[1], text:m[2]});
+  }
+  return out;
+}
+
+function markChoice(row, v){
+  [...row.querySelectorAll(".choiceBtn")].forEach(btn=>{
+    btn.classList.toggle("on", btn.textContent === v);
   });
 }
 
-function nextStep(){
-  const isLast = state.idx === state.quizItems.length - 1;
-  if(!isLast){
-    state.idx++;
-    renderQuestion();
-    return;
-  }
-  stopTimer();
-  renderResults();
-  showScreen("result");
-}
-
-/* ===== 결과/오답 재시험 ===== */
-function computeResult(){
-  const total = state.quizItems.length;
+function gradeAndBuildWrongNote(){
   let correct = 0;
+  const wrong = [];
 
-  const rows = state.quizItems.map(q => {
-    const my = state.answers[q.id] ?? null;
-    const ans = getAnswerFor(q);
-    const ok = (typeof ans === "number") && (my === ans);
+  for(const item of quiz){
+    const key = item.code;
+    const ua = (userAns.get(key) ?? "").toString().trim();
+    const a = aMap.get(key);
+    const ca = (a?.ans ?? "").toString().trim();
+
+    const ok = ua !== "" && ua === ca;
     if(ok) correct++;
-    return { q, my, ans, ok, explain: getExplainFor(q) };
+    else wrong.push({item, ua: ua || "(미입력)", ca, expl: a?.expl || ""});
+  }
+
+  // Wrong note txt
+  let t = "";
+  t += "[오답노트]\n";
+  t += `과목: ${selectedSubject}\n`;
+  t += `회차: ${selectedRound}회\n`;
+  t += `문항수: ${quiz.length}\n`;
+  t += `정답: ${correct} / ${quiz.length}\n\n`;
+
+  wrong.forEach(w=>{
+    t += `- ${w.item.code}\n`;
+    t += `  내 답: ${w.ua}\n`;
+    t += `  정답: ${w.ca || "(정답 미등록)"}\n`;
+    if(w.expl) t += `  해설: ${w.expl}\n`;
+    t += "\n";
   });
 
-  const wrong = rows.filter(r => !r.ok);
-  return { total, correct, wrongCount: total - correct, rows, wrong };
+  wrongNoteText = t;
+  $("scoreText").textContent = `정답 ${correct} / ${quiz.length}`;
+  $("resultHint").textContent = `오답노트 파일명 예: 오답노트_${selectedRound}회_${selectedSubject}.txt`;
 }
 
-function startQuizWith(items){
-  state.quizItems = items.slice();
-  state.idx = 0;
-  state.answers = {};
-  state.showOnlyWrong = true;
-
-  showScreen("quiz");
-  startTimer();
-  renderQuestion();
-}
-
-function renderResults(){
-  const elapsed = state.timerStart ? (Date.now() - state.timerStart) : 0;
-  const t = fmtTime(elapsed);
-
-  const { total, correct, wrongCount, rows, wrong } = computeResult();
-
-  $("#scoreText").textContent = `${correct} / ${total} 정답`;
-  $("#scoreMeta").textContent = `소요시간 ${t} · 오답 ${wrongCount}문항`;
-
-  const list = $("#resultList");
-  list.innerHTML = "";
-
-  const data = state.showOnlyWrong ? wrong : rows;
-
-  if(data.length === 0){
-    const empty = document.createElement("div");
-    empty.className = "result-card";
-    empty.textContent = "표시할 항목이 없습니다.";
-    list.appendChild(empty);
+/** ---------- Events ---------- **/
+$("btnStart").onclick = async () => {
+  if(!selectedSubject || !selectedRound){
+    $("homeHint").textContent = "과목과 회차를 먼저 선택하세요.";
     return;
   }
 
-  data.forEach((r) => {
-    const q = r.q;
-    const my = r.my;
-    const ans = r.ans;
-    const ok = r.ok;
+  const file = findFile(selectedRound, selectedSubject);
+  if(!file){
+    $("homeHint").textContent = "선택한 회차/과목의 TXT 파일이 없습니다. manifest.json files에 등록하세요.";
+    return;
+  }
 
-    const card = document.createElement("div");
-    card.className = "wrong-card";
-
-    const head = document.createElement("div");
-    head.className = "wrong-head";
-
-    const title = document.createElement("div");
-    title.className = "wrong-title";
-    title.textContent = `${q.subject} / ${q.session}회 / ${q.no}번`;
-
-    const pill = document.createElement("div");
-    pill.className = "pill " + (ok ? "good" : "bad");
-    pill.textContent = ok ? "정답" : "오답";
-
-    head.appendChild(title);
-    head.appendChild(pill);
-
-    const body = document.createElement("div");
-    body.className = "wrong-body";
-
-    const imgWrap = document.createElement("div");
-    renderPartsInto(imgWrap, q);
-
-    const row1 = document.createElement("div");
-    row1.className = "qa-row";
-    row1.innerHTML = `<span class="k">내 선택</span><span class="v">${my === null ? "-" : my + "번"}</span>`;
-
-    const row2 = document.createElement("div");
-    row2.className = "qa-row";
-    row2.innerHTML = `<span class="k">정답</span><span class="v">${typeof ans === "number" ? ans + "번" : "-"}</span>`;
-
-    const exp = document.createElement("div");
-    exp.className = "explain-box";
-    exp.textContent = (r.explain && r.explain.trim())
-      ? r.explain
-      : "해설 데이터가 아직 없습니다.";
-
-    body.appendChild(imgWrap);
-    body.appendChild(row1);
-    body.appendChild(row2);
-    body.appendChild(exp);
-
-    card.appendChild(head);
-    card.appendChild(body);
-    list.appendChild(card);
-  });
-
-  setTimeout(reapplyAllCrops, 80);
-}
-/* ========================= */
-
-async function init(){
-  showScreen("home");
-
-  window.addEventListener("resize", () => reapplyAllCrops());
+  const count = Math.max(1, parseInt($("countInput").value, 10) || 1);
 
   try{
-    await loadBank();
-  }catch(e){
-    alert("data/bank.json을 불러오지 못했습니다.\n경로/파일명을 확인하세요.\n\n" + e.message);
-    return;
+    $("homeHint").textContent = "로딩 중...";
+    await loadQA(selectedRound, selectedSubject);
+
+    if(!qItems.length){
+      $("homeHint").textContent = "문제 데이터가 비어 있습니다.";
+      return;
+    }
+
+    buildQuiz(count);
+    go("screen-quiz");
+    renderQuestion();
+  }catch(err){
+    $("homeHint").textContent = `로드 실패: ${err.message}`;
   }
+};
 
-  await loadAnswerAndExplain();
+$("btnNext").onclick = () => {
+  if(idx < quiz.length - 1){
+    idx++;
+    renderQuestion();
+  }
+};
 
-  $$(".subject-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      if(btn.disabled) return;
-      const subj = btn.dataset.subject;
-      state.subject = subj;
+$("btnSubmit").onclick = () => {
+  gradeAndBuildWrongNote();
+  go("screen-result");
+};
 
-      const total = state.bank.filter(q => q.subject === subj).length;
-      $("#pickTitle").textContent = `${subj} 선택`;
-      $("#pickHint").textContent = `총 ${total}문항 중 랜덤 출제`;
-      $("#countInput").value = Math.min(20, total || 20);
-      $("#countInput").max = total || 999;
+$("btnDownloadWrong").onclick = () => {
+  const fn = `오답노트_${selectedRound}회_${selectedSubject}.txt`;
+  downloadTxt(fn, wrongNoteText);
+};
 
-      showScreen("pick");
-      setTimeout(()=>$("#countInput").focus(), 50);
-    });
-  });
+$("btnBackHome").onclick = () => {
+  go("screen-home");
+  renderRoundGrid();
+  updateHomeHint();
+};
 
-  $("#btnBackHome").addEventListener("click", () => showScreen("home"));
+$("btnQuit").onclick = () => {
+  go("screen-home");
+  renderRoundGrid();
+  updateHomeHint();
+};
 
-  $("#btnStart").addEventListener("click", () => {
-    if(!state.subject) return;
-
-    const total = state.bank.filter(q => q.subject === state.subject).length;
-    const n = Math.max(1, Math.min(Number($("#countInput").value || 1), total || 1));
-
-    const items = pickQuestions(state.subject, n);
-    startQuizWith(items);
-  });
-
-  // 선택
-  $$("#choiceDots .dot").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const q = state.quizItems[state.idx];
-      if(!q) return;
-      const c = Number(btn.dataset.choice);
-      state.answers[q.id] = c;
-      renderQuestion();
-    });
-  });
-
-  // 다음/결과
-  $("#btnNext").addEventListener("click", () => {
-    const q = state.quizItems[state.idx];
-    const my = state.answers[q.id] ?? null;
-    if(my === null){
-      toast("선택하지 않았습니다. 그대로 진행할까요?");
-    }
-    nextStep();
-  });
-
-  // 나가기
-  $("#btnExit").addEventListener("click", () => {
-    if(confirm("나가면 풀이 기록이 초기화됩니다. 나갈까요?")){
-      resetAll();
-    }
-  });
-
-  // 메뉴
-  $("#btnMenu").addEventListener("click", openSheet);
-  $("#btnCloseSheet").addEventListener("click", closeSheet);
-  $("#sheet").addEventListener("click", (e) => {
-    if(e.target.id === "sheet") closeSheet();
-  });
-
-  $("#btnReset").addEventListener("click", () => {
-    closeSheet();
-    if(confirm("처음부터 다시 시작할까요?")){
-      resetAll();
-    }
-  });
-
-  // RESULT
-  $("#btnResultHome").addEventListener("click", () => resetAll());
-
-  $("#btnRetry").addEventListener("click", () => {
-    const subj = state.subject;
-    const count = state.quizItems.length || 20;
-    if(!subj){
-      resetAll();
-      return;
-    }
-    const items = pickQuestions(subj, count);
-    startQuizWith(items);
-  });
-
-  $("#btnOnlyWrong").addEventListener("click", () => {
-    state.showOnlyWrong = true;
-    renderResults();
-  });
-
-  $("#btnAllList").addEventListener("click", () => {
-    state.showOnlyWrong = false;
-    renderResults();
-  });
-
-  // ✅ 오답만 다시 풀기
-  $("#btnRetryWrong").addEventListener("click", () => {
-    const { wrong } = computeResult();
-    const wrongQs = wrong.map(r => r.q);
-
-    if(!wrongQs.length){
-      alert("오답이 없습니다. 👍");
-      return;
-    }
-
-    if(!confirm(`오답 ${wrongQs.length}문항만 다시 풀까요?`)) return;
-
-    startQuizWith(wrongQs);
-  });
-
-  // 키보드
-  window.addEventListener("keydown", (e) => {
-    if(SCREENS.quiz.classList.contains("hidden")) return;
-
-    if(e.key === "ArrowRight") $("#btnNext").click();
-    if(["1","2","3","4"].includes(e.key)){
-      const q = state.quizItems[state.idx];
-      if(!q) return;
-      state.answers[q.id] = Number(e.key);
-      renderQuestion();
-    }
-  });
-}
-
-init();
+/** ---------- Init ---------- **/
+(async function init(){
+  go("screen-home");
+  try{
+    manifest = await loadManifest();
+    renderHome();
+  }catch(err){
+    $("homeHint").textContent = `manifest.json 로드 실패: ${err.message}`;
+  }
+})();
