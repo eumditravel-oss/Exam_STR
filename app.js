@@ -450,3 +450,4 @@ $("btnQuit").onclick = () => {
     $("homeHint").textContent = `manifest.json 로드 실패: ${err.message}`;
   }
 })();
+ 
