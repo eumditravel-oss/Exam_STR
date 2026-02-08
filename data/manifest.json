@@ -7,12 +7,32 @@
     "제도및법규"
   ],
   "rounds": [10,11,12,13,14,15,16,17,18,19,20,21],
-  "files": [
+  
+}
+{
+  "app": {
+    "name": "기출문제 풀이 프로그램",
+    "version": "1.0.0",
+    "description": "국가공인 원가분석사 기출문제 랜덤 풀이 시스템"
+  },
+
+  "subjects": [
     {
-      "round": 11,
-      "subject": "재무회계",
-      "q": "data/questions/11회_재무회계.txt",
-      "a": "data/answers/11회_재무회계.txt"
+      "id": "financial_accounting",
+      "name": "재무회계",
+      "rounds": [
+        {
+          "round": 10,
+          "label": "제10회",
+          "year": 2017,
+          "session": 1,
+          "question_file": "data/questions/10회_재무회계.txt",
+          "answer_file": "data/answers/10회_재무회계.txt",
+          "question_count": 40,
+          "point_per_question": 2.5,
+          "code_prefix": "10회_재무회계"
+        }
+      ]
     }
   ]
 }
