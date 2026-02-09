@@ -141,3 +141,58 @@ input[type="number"], input[type="text"]{
   margin-top: 8px;
   line-height: 1.45;
 }
+
+
+/* --- MCQ: 보기 자체 클릭형 UI --- */
+.choiceList{
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.choiceItem{
+  width: 100%;
+  text-align: left;
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  gap: 10px;
+  align-items: start;
+
+  border: 1px solid rgba(0,0,0,.10);
+  background: #fff;
+  border-radius: 14px;
+  padding: 12px 12px;
+  cursor: pointer;
+
+  transition: transform .06s ease, box-shadow .12s ease, border-color .12s ease;
+  font-weight: 900;
+}
+
+.choiceItem:hover{
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(0,0,0,.06);
+}
+
+.choiceNo{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(0,0,0,.10);
+  background: rgba(0,0,0,.02);
+  font-weight: 1000;
+}
+
+.choiceText{
+  white-space: pre-wrap;
+  line-height: 1.45;
+  font-weight: 900;
+}
+
+/* 선택 상태 */
+.choiceItem.on{
+  outline: 3px solid rgba(240,138,36,.25);
+  border-color: rgba(240,138,36,.35);
+}
+
