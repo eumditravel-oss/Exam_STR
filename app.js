@@ -34,6 +34,14 @@ function shuffle(arr){
   return a;
 }
 
+/** CODE Normalizer: "..._08번" -> "..._8번" */
+function normalizeCode(code){
+  const s = (code ?? "").toString().trim();
+  // 마지막 패턴: _숫자+번 을 찾아서 숫자 앞의 0 제거
+  return s.replace(/_(\d+)번$/, (_, n) => `_${String(parseInt(n, 10))}번`);
+}
+
+
 function downloadTxt(filename, text){
   const blob = new Blob([text], {type:"text/plain;charset=utf-8"});
   const a = document.createElement("a");
@@ -140,29 +148,36 @@ async function loadQA(round, subject){
 
   // Parse questions
   const qRecs = parseRecords("\n@@@\n" + qTxt.trim() + "\n");
-  qItems = qRecs.map(r => ({
-    code: r.CODE,
+  qItems = qRecs.map(r => {
+  const rawCode = (r.CODE || "").trim();
+  return {
+    code: normalizeCode(rawCode),     // ✅ 내부 매칭용(정규화)
+    codeRaw: rawCode,                 // (선택) 원본 표시용
     round: Number(r.ROUND),
     subject: r.SUBJECT,
     no: Number(r.NO),
-    type: (r.TYPE || "").toUpperCase(), // MCQ / SA
+    type: (r.TYPE || "").toUpperCase(),
     point: r.POINT ? Number(r.POINT) : null,
     q: r.Q || "",
     ex: r.EX || "",
     table: r.TABLE || "",
     choicesRaw: r.CHOICES || ""
-  }));
+  };
+});
+
 
   // Parse answers
   const aRecs = parseRecords("\n@@@\n" + aTxt.trim() + "\n");
   aMap = new Map();
   aRecs.forEach(r => {
-    const code = r.CODE;
-    if(!code) return;
-    aMap.set(code, {
-      ans: (r.ANS ?? "").toString().trim(),
-      expl: (r.EXPL ?? "").toString().trim()
-    });
+    const codeRaw = (r.CODE || "").trim();
+if(!codeRaw) return;
+const code = normalizeCode(codeRaw);  // ✅ 정규화 키로 저장
+aMap.set(code, {
+  ans: (r.ANS ?? "").toString().trim(),
+  expl: (r.EXPL ?? "").toString().trim()
+});
+
   });
 
   // Sanity: only keep questions that have answers (optional policy)
