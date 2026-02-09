@@ -271,7 +271,7 @@ function renderQuestion(){
     hide("exBlock");
   }
 
-  // TABLE (MVP: 그대로 pre 표시. 추후 table 변환 가능)
+  // TABLE
   if((item.table || "").trim()){
     $("tableHost").textContent = item.table;
     show("tableBlock");
@@ -286,57 +286,47 @@ function renderQuestion(){
   const saved = userAns.get(item.code) ?? "";
 
   const isMCQ = (item.type === "MCQ") || hasChoices(item.choicesRaw);
-if(isMCQ){
-  const choices = parseChoices(item.choicesRaw);
 
-  // 보기(텍스트) 자체를 클릭 가능하게 표시
-  const list = document.createElement("div");
-  list.className = "choiceList";
+  if(isMCQ){
+    const choices = parseChoices(item.choicesRaw);
 
-  // choices가 없으면(형식만 MCQ) 기본 1~4만 노출
-  const opts = choices.length
-    ? choices.map(c => ({ no: c.no, text: c.text }))
-    : ["1","2","3","4"].map(n => ({ no: n, text: "" }));
+    const list = document.createElement("div");
+    list.className = "choiceList";
 
-  opts.forEach(opt => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "choiceItem";
-    btn.dataset.no = opt.no;
+    const opts = choices.length
+      ? choices.map(c => ({ no: c.no, text: c.text }))
+      : ["1","2","3","4"].map(n => ({ no: n, text: "" }));
 
-    // 내용 구성: "1) 텍스트" 전체가 클릭 영역
-    const left = document.createElement("div");
-    left.className = "choiceNo";
-    left.textContent = `${opt.no})`;
+    opts.forEach(opt => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "choiceItem";
+      btn.dataset.no = opt.no;
 
-    const right = document.createElement("div");
-    right.className = "choiceText";
-    right.textContent = opt.text || ""; // 텍스트 없으면 번호만
+      const left = document.createElement("div");
+      left.className = "choiceNo";
+      left.textContent = `${opt.no})`;
 
-    btn.appendChild(left);
-    btn.appendChild(right);
+      const right = document.createElement("div");
+      right.className = "choiceText";
+      right.textContent = opt.text || "";
 
-    btn.onclick = () => {
-      userAns.set(item.code, opt.no);
-      markChoice(list, opt.no);
-    };
+      btn.appendChild(left);
+      btn.appendChild(right);
 
-    list.appendChild(btn);
-  });
+      btn.onclick = () => {
+        userAns.set(item.code, opt.no);
+        markChoice(list, opt.no);
+      };
 
-  area.appendChild(list);
+      list.appendChild(btn);
+    });
 
-  if(saved) markChoice(list, saved);
+    area.appendChild(list);
 
-} else {
-  const input = document.createElement("input");
-  input.type = "text";
-  input.placeholder = "정답 입력";
-  input.value = saved;
-  input.oninput = () => userAns.set(item.code, input.value);
-  area.appendChild(input);
-}
+    if(saved) markChoice(list, saved);
 
+  } else {
     const input = document.createElement("input");
     input.type = "text";
     input.placeholder = "정답 입력";
@@ -349,11 +339,12 @@ if(isMCQ){
   if(idx === total - 1){
     hide("btnNext");
     show("btnSubmit");
-  }else{
+  } else {
     show("btnNext");
     hide("btnSubmit");
   }
 }
+
 
 function hasChoices(raw){
   return /\b1\)\s*/.test(raw || "");
