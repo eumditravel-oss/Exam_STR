@@ -286,36 +286,57 @@ function renderQuestion(){
   const saved = userAns.get(item.code) ?? "";
 
   const isMCQ = (item.type === "MCQ") || hasChoices(item.choicesRaw);
-  if(isMCQ){
-    const row = document.createElement("div");
-    row.className = "choiceRow";
+if(isMCQ){
+  const choices = parseChoices(item.choicesRaw);
 
-    const choices = parseChoices(item.choicesRaw);
-    // choices may be empty if only type=MCQ; still show 1~4 buttons
-    const opts = choices.length ? choices.map(c => c.no) : ["1","2","3","4"];
+  // 보기(텍스트) 자체를 클릭 가능하게 표시
+  const list = document.createElement("div");
+  list.className = "choiceList";
 
-    opts.forEach(v => {
-      const b = document.createElement("button");
-      b.className = "choiceBtn";
-      b.textContent = v;
-      b.onclick = () => {
-        userAns.set(item.code, v);
-        markChoice(row, v);
-      };
-      row.appendChild(b);
-    });
+  // choices가 없으면(형식만 MCQ) 기본 1~4만 노출
+  const opts = choices.length
+    ? choices.map(c => ({ no: c.no, text: c.text }))
+    : ["1","2","3","4"].map(n => ({ no: n, text: "" }));
 
-    // show choices text if present
-    if(choices.length){
-      const box = document.createElement("div");
-      box.className = "pre";
-      box.textContent = choices.map(c => `${c.no}) ${c.text}`).join("\n");
-      area.appendChild(box);
-    }
+  opts.forEach(opt => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "choiceItem";
+    btn.dataset.no = opt.no;
 
-    area.appendChild(row);
-    if(saved) markChoice(row, saved);
-  } else {
+    // 내용 구성: "1) 텍스트" 전체가 클릭 영역
+    const left = document.createElement("div");
+    left.className = "choiceNo";
+    left.textContent = `${opt.no})`;
+
+    const right = document.createElement("div");
+    right.className = "choiceText";
+    right.textContent = opt.text || ""; // 텍스트 없으면 번호만
+
+    btn.appendChild(left);
+    btn.appendChild(right);
+
+    btn.onclick = () => {
+      userAns.set(item.code, opt.no);
+      markChoice(list, opt.no);
+    };
+
+    list.appendChild(btn);
+  });
+
+  area.appendChild(list);
+
+  if(saved) markChoice(list, saved);
+
+} else {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.placeholder = "정답 입력";
+  input.value = saved;
+  input.oninput = () => userAns.set(item.code, input.value);
+  area.appendChild(input);
+}
+
     const input = document.createElement("input");
     input.type = "text";
     input.placeholder = "정답 입력";
@@ -352,11 +373,20 @@ function parseChoices(raw){
   return out;
 }
 
-function markChoice(row, v){
-  [...row.querySelectorAll(".choiceBtn")].forEach(btn=>{
-    btn.classList.toggle("on", btn.textContent === v);
+function markChoice(host, v){
+  // 보기 전체 클릭형(.choiceItem)
+  const items = [...host.querySelectorAll(".choiceItem")];
+  if(items.length){
+    items.forEach(el => el.classList.toggle("on", el.dataset.no === String(v)));
+    return;
+  }
+
+  // (구버전 호환) 숫자 버튼형(.choiceBtn)
+  [...host.querySelectorAll(".choiceBtn")].forEach(btn=>{
+    btn.classList.toggle("on", btn.textContent === String(v));
   });
 }
+
 
 function gradeAndBuildWrongNote(){
   let correct = 0;
