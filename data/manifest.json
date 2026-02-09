@@ -19,6 +19,18 @@
       "subject": "재무회계",
       "q": "data/questions/11회_재무회계.txt",
       "a": "data/answers/11회_재무회계.txt"
+    },
+    {
+      "round": 12,
+      "subject": "재무회계",
+      "q": "data/questions/12회_재무회계.txt",
+      "a": "data/answers/12회_재무회계.txt"
+    },
+    {
+      "round": 13,
+      "subject": "재무회계",
+      "q": "data/questions/13회_재무회계.txt",
+      "a": "data/answers/13회_재무회계.txt"
     }
   ]
 }
