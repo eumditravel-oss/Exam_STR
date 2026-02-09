@@ -146,24 +146,39 @@ async function loadQA(round, subject){
 
   const [qTxt, aTxt] = await Promise.all([qRes.text(), aRes.text()]);
 
-  // Parse questions
+    // Parse questions
   const qRecs = parseRecords("\n@@@\n" + qTxt.trim() + "\n");
+
   qItems = qRecs.map(r => {
-  const rawCode = (r.CODE || "").trim();
-  return {
-    code: normalizeCode(rawCode),     // ✅ 내부 매칭용(정규화)
-    codeRaw: rawCode,                 // (선택) 원본 표시용
-    round: Number(r.ROUND),
-    subject: r.SUBJECT,
-    no: Number(r.NO),
-    type: (r.TYPE || "").toUpperCase(),
-    point: r.POINT ? Number(r.POINT) : null,
-    q: r.Q || "",
-    ex: r.EX || "",
-    table: r.TABLE || "",
-    choicesRaw: r.CHOICES || ""
-  };
-});
+    const rawCode = (r.CODE || "").trim();
+
+    // ✅ Q 라벨이 없으면 RAW를 문제 본문으로 fallback
+    // (문제 TXT가 "문제:" 같은 라벨을 쓰거나, 라벨 없이 본문만 있는 경우 대응)
+    const qText =
+      (r.Q && r.Q.trim()) ? r.Q :
+      (r.QUESTION && r.QUESTION.trim()) ? r.QUESTION :
+      (r.RAW && r.RAW.trim()) ? r.RAW :
+      "";
+
+    return {
+      code: normalizeCode(rawCode),
+      codeRaw: rawCode,
+
+      round: Number(r.ROUND),
+      subject: r.SUBJECT,
+      no: Number(r.NO),
+      type: (r.TYPE || "").toUpperCase(),
+      point: r.POINT ? Number(r.POINT) : null,
+
+      // ✅ 여기 핵심
+      q: qText,
+
+      ex: r.EX || "",
+      table: r.TABLE || "",
+      choicesRaw: r.CHOICES || ""
+    };
+  });
+
 
 
   // Parse answers
