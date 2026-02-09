@@ -391,10 +391,10 @@ function gradeAndBuildWrongNote(){
 
     const ok = ua !== "" && ua === ca;
     if(ok) correct++;
-    else wrong.push({item, ua: ua || "(미입력)", ca, expl: a?.expl || ""});
+    else wrong.push({ item, ua: ua || "(미입력)", ca, expl: a?.expl || "" });
   }
 
-  // Wrong note txt
+  // 오답노트 TXT
   let t = "";
   t += "[오답노트]\n";
   t += `과목: ${selectedSubject}\n`;
@@ -402,11 +402,42 @@ function gradeAndBuildWrongNote(){
   t += `문항수: ${quiz.length}\n`;
   t += `정답: ${correct} / ${quiz.length}\n\n`;
 
-  wrong.forEach(w=>{
-    t += `- ${w.item.code}\n`;
-    t += `  내 답: ${w.ua}\n`;
-    t += `  정답: ${w.ca || "(정답 미등록)"}\n`;
-    if(w.expl) t += `  해설: ${w.expl}\n`;
+  wrong.forEach((w, i) => {
+    const it = w.item;
+
+    t += `==============================\n`;
+    t += `${i+1}. ${it.codeRaw || it.code}\n`;
+    t += `내 답: ${w.ua}\n`;
+    t += `정답: ${w.ca || "(정답 미등록)"}\n`;
+    if(w.expl) t += `해설: ${w.expl}\n`;
+    t += `------------------------------\n`;
+
+    // 문제 본문
+    if((it.q || "").trim()){
+      t += "[문제]\n";
+      t += `${it.q.trim()}\n\n`;
+    }
+
+    // 예제/자료
+    if((it.ex || "").trim()){
+      t += "[예제/자료]\n";
+      t += `${it.ex.trim()}\n\n`;
+    }
+
+    // 표
+    if((it.table || "").trim()){
+      t += "[표]\n";
+      t += `${it.table.trim()}\n\n`;
+    }
+
+    // 보기(있으면)
+    const choices = parseChoices(it.choicesRaw);
+    if(choices.length){
+      t += "[보기]\n";
+      t += choices.map(c => `${c.no}) ${c.text}`).join("\n");
+      t += "\n\n";
+    }
+
     t += "\n";
   });
 
@@ -414,6 +445,7 @@ function gradeAndBuildWrongNote(){
   $("scoreText").textContent = `정답 ${correct} / ${quiz.length}`;
   $("resultHint").textContent = `오답노트 파일명 예: 오답노트_${selectedRound}회_${selectedSubject}.txt`;
 }
+
 
 /** ---------- Events ---------- **/
 $("btnStart").onclick = async () => {
