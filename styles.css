@@ -196,3 +196,108 @@ input[type="number"], input[type="text"]{
   border-color: rgba(240,138,36,.35);
 }
 
+/* =========================
+   Mobile Optimization
+   ========================= */
+@media (max-width: 640px){
+
+  /* 전체 화면 여백 줄이기 */
+  .screen{
+    margin: 10px auto;
+    padding: 0 10px 24px;
+  }
+
+  /* 카드 여백/모서리 */
+  .card{
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  /* 상단 제목 */
+  .brand .title{
+    font-size: 16px;
+  }
+  .brand .sub{
+    font-size: 11px;
+  }
+
+  /* 문제 번호/메타 */
+  .meta{
+    font-size: 12px;
+  }
+
+  /* 문제 본문 */
+  #qText{
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  /* 예제 / 표 */
+  .pre{
+    font-size: 14px;
+    line-height: 1.6;
+    padding: 10px;
+  }
+
+  /* =====================
+     객관식 보기 (클릭형)
+     ===================== */
+  .choiceList{
+    gap: 12px;
+  }
+
+  .choiceItem{
+    grid-template-columns: 42px 1fr;
+    padding: 14px 12px;
+    font-size: 15px;
+  }
+
+  .choiceNo{
+    height: 36px;
+    font-size: 14px;
+  }
+
+  .choiceText{
+    font-size: 15px;
+    line-height: 1.55;
+  }
+
+  /* 선택 강조 더 명확하게 */
+  .choiceItem.on{
+    outline-width: 4px;
+  }
+
+  /* =====================
+     버튼 공통
+     ===================== */
+  .btn{
+    padding: 12px 14px;
+    font-size: 14px;
+  }
+
+  .btn.primary{
+    font-size: 15px;
+  }
+
+  /* 다음문제 / 정답제출 버튼 줄바꿈 방지 */
+  .row{
+    gap: 8px;
+  }
+
+  /* 숫자 입력 */
+  input[type="number"],
+  input[type="text"]{
+    font-size: 15px;
+    padding: 12px 14px;
+    width: 100%;
+  }
+
+  /* 결과 점수 */
+  .score{
+    font-size: 16px;
+  }
+
+  .hint{
+    font-size: 11px;
+  }
+}
