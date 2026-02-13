@@ -64,6 +64,14 @@ body{
   cursor: pointer;
   font-weight: 800;
 }
+
+/* ✅ 칩 공통: 긴 텍스트(예: 10~21회 전체 랜덤) 깨짐 방지 */
+.chip{
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .btn.primary{
   background: var(--accent);
   border-color: rgba(0,0,0,.08);
@@ -239,6 +247,32 @@ input[type="number"], input[type="text"]{
     padding: 10px;
   }
 
+  /* ✅ 과목/회차 칩: 모바일에서 2~3열 안정 배치 */
+  .grid{
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  /* 화면이 조금 넓으면 3열 */
+  @media (min-width: 480px){
+    .grid{
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  /* ✅ 칩 높이/가독성 + 긴 텍스트 줄임표 */
+  .chip{
+    padding: 12px 12px;
+    font-size: 14px;
+    font-weight: 900;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   /* =====================
      객관식 보기 (클릭형)
      ===================== */
@@ -284,11 +318,24 @@ input[type="number"], input[type="text"]{
     gap: 8px;
   }
 
-  /* 숫자 입력 */
+  /* ✅ 숫자 입력: 모바일에서 기본은 100%지만
+     HOME(문항 수) row에서는 버튼과 함께 보기 좋게 */
   input[type="number"],
   input[type="text"]{
     font-size: 15px;
     padding: 12px 14px;
+    width: 100%;
+  }
+
+  /* 홈 화면의 (문항수 입력 + 시작 버튼) 한 줄 조합 개선 */
+  #screen-home .row{
+    flex-direction: column;
+    align-items: stretch;
+  }
+  #screen-home #countInput{
+    width: 100%;
+  }
+  #screen-home #btnStart{
     width: 100%;
   }
 
