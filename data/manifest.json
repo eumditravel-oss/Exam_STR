@@ -81,7 +81,7 @@
       "a": "data/answers/21회_재무회계.txt"
     },
         {
-      "round": 22,
+      "round": "주관식모음",
       "subject": "재무회계",
       "q": "data/questions/주관식모음_재무회계.txt",
       "a": "data/answers/주관식모음_재무회계.txt"
