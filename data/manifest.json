@@ -83,8 +83,8 @@
         {
       "round": 22,
       "subject": "재무회계",
-      "q": "data/questions/재무회계_주관식모음.txt",
-      "a": "data/answers/재무회계_주관식모음.txt"
+      "q": "data/questions/주관식모음_재무회계.txt",
+      "a": "data/answers/주관식모음_재무회계.txt"
     }
   ]
 }
