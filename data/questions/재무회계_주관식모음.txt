@@ -3,7 +3,7 @@ CODE: 재무회계_주관식모음_01번
 ROUND: 21
 SUBJECT: 재무회계
 NO: 26
-TYPE: SHORT
+TYPE: SAQ
 POINT: 4.0
 Q: 20x1년 기말자산 200억, 순이익 400억 / 20x2년 기말자산 300억, 순이익 500억일 때, 20x2년의 총자산순이익률은?
 EX:
@@ -15,7 +15,7 @@ CODE: 재무회계_주관식모음_02번
 ROUND: 21
 SUBJECT: 재무회계
 NO: 27
-TYPE: SHORT
+TYPE: SAQ
 POINT: 4.0
 Q: 20x1년 10월 1일 빌린 돈의 만기가 20x3년 9월 30일이라면, 20x1년 말 기준 재무상태표에 표시할 5글자 계정과목은?
 EX:
@@ -27,7 +27,7 @@ CODE: 재무회계_주관식모음_03번
 ROUND: 21
 SUBJECT: 재무회계
 NO: 28
-TYPE: SHORT
+TYPE: SAQ
 POINT: 4.0
 Q: 시장참여자 사이의 정상거래에서 자산을 팔 때 받거나 부채를 넘길 때 지급하게 되는 금액(4글자)은?
 EX:
@@ -39,7 +39,7 @@ CODE: 재무회계_주관식모음_04번
 ROUND: 21
 SUBJECT: 재무회계
 NO: 29
-TYPE: SHORT
+TYPE: SAQ
 POINT: 4.0
 Q: 역사적 원가(취득원가)로 평가하거나 감가상각을 하는 근거가 되는, "기업이 망하지 않고 쭉 간다"는 가정(4글자)은?
 EX:
@@ -51,7 +51,7 @@ CODE: 재무회계_주관식모음_05번
 ROUND: 21
 SUBJECT: 재무회계
 NO: 30
-TYPE: SHORT
+TYPE: SAQ
 POINT: 4.0
 Q: 판매 활동과 이를 지원하기 위해 발생하는 비용으로, 매출원가에 속하지 않는 영업비용(7글자)은?
 EX:
@@ -63,7 +63,7 @@ CODE: 재무회계_주관식모음_06번
 ROUND: 20
 SUBJECT: 재무회계
 NO: 26
-TYPE: SHORT
+TYPE: SAQ
 POINT: 4.0
 Q: 현금의 유출입과 관계없이 수익과 비용이 발생한 시점을 기준으로 처리하는 회계 원칙은?
 EX:
@@ -75,7 +75,7 @@ CODE: 재무회계_주관식모음_07번
 ROUND: 20
 SUBJECT: 재무회계
 NO: 27
-TYPE: SHORT
+TYPE: SAQ
 POINT: 4.0
 Q: 기초자산 100만, 기초부채 30만, 총수익 30만, 총비용 10만일 때 기말자본은? (단위: 원)
 EX:
@@ -87,7 +87,7 @@ CODE: 재무회계_주관식모음_08번
 ROUND: 20
 SUBJECT: 재무회계
 NO: 28
-TYPE: SHORT
+TYPE: SAQ
 POINT: 4.0
 Q: 손익계산서 양식에 명칭, 기업명, 금액 단위와 함께 필수적으로 표시해야 하는 항목은?
 EX:
@@ -99,7 +99,7 @@ CODE: 재무회계_주관식모음_09번
 ROUND: 20
 SUBJECT: 재무회계
 NO: 29
-TYPE: SHORT
+TYPE: SAQ
 POINT: 4.0
 Q: 자산재평가잉여금, 매도가능금융자산평가손익 등 미실현 손익을 표시하는 자본 항목은?
 EX:
@@ -111,7 +111,7 @@ CODE: 재무회계_주관식모음_10번
 ROUND: 20
 SUBJECT: 재무회계
 NO: 30
-TYPE: SHORT
+TYPE: SAQ
 POINT: 4.0
 Q: 단기채무 변제 능력을 나타내며, 유동자산을 유동부채로 나누어 계산하는 비율은?
 EX:
@@ -123,7 +123,7 @@ CODE: 재무회계_주관식모음_11번
 ROUND: 19
 SUBJECT: 재무회계
 NO: 26
-TYPE: SHORT
+TYPE: SAQ
 POINT: 4.0
 Q: 시산표의 차변(왼쪽) 항목은 자산과 ( ? )이다.
 EX:
@@ -135,7 +135,7 @@ CODE: 재무회계_주관식모음_12번
 ROUND: 19
 SUBJECT: 재무회계
 NO: 27
-TYPE: SHORT
+TYPE: SAQ
 POINT: 4.0
 Q: 횡령이나 오류를 방지하고 회계기록의 정확성을 높이기 위해 기업 내부에 구축하는 감시 제도는?
 EX:
@@ -147,7 +147,7 @@ CODE: 재무회계_주관식모음_13번
 ROUND: 19
 SUBJECT: 재무회계
 NO: 28
-TYPE: SHORT
+TYPE: SAQ
 POINT: 4.0
 Q: 기업의 활동을 영업, 투자, 재무활동으로 나누어 현금의 흐름을 보여주는 표는?
 EX:
@@ -159,7 +159,7 @@ CODE: 재무회계_주관식모음_14번
 ROUND: 19
 SUBJECT: 재무회계
 NO: 29
-TYPE: SHORT
+TYPE: SAQ
 POINT: 4.0
 Q: 발생주의에서 수익이 실현된 시점으로 보는 가장 일반적인 기준은?
 EX:
@@ -171,7 +171,7 @@ CODE: 재무회계_주관식모음_15번
 ROUND: 19
 SUBJECT: 재무회계
 NO: 30
-TYPE: SHORT
+TYPE: SAQ
 POINT: 4.0
 Q: 독립적인 공인회계사가 기업의 재무제표가 제대로 작성되었는지 검사하고 의견을 내는 제도는?
 EX:
