@@ -79,6 +79,12 @@
       "subject": "재무회계",
       "q": "data/questions/21회_재무회계.txt",
       "a": "data/answers/21회_재무회계.txt"
+    },
+        {
+      "round": 22,
+      "subject": "재무회계",
+      "q": "data/questions/재무회계_주관식모음.txt",
+      "a": "data/answers/재무회계_주관식모음.txt"
     }
   ]
 }
