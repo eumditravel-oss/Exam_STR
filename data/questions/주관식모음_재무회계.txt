@@ -1,5 +1,5 @@
 @@@
-CODE: 재무회계_주관식모음_01번
+CODE: 주관식모음_재무회계_01번
 ROUND: 21
 SUBJECT: 재무회계
 NO: 26
@@ -11,7 +11,7 @@ TABLE:
 CHOICES:
 ---
 @@@
-CODE: 재무회계_주관식모음_02번
+CODE: 주관식모음_재무회계_02번
 ROUND: 21
 SUBJECT: 재무회계
 NO: 27
@@ -23,7 +23,7 @@ TABLE:
 CHOICES:
 ---
 @@@
-CODE: 재무회계_주관식모음_03번
+CODE: 주관식모음_재무회계_03번
 ROUND: 21
 SUBJECT: 재무회계
 NO: 28
@@ -35,7 +35,7 @@ TABLE:
 CHOICES:
 ---
 @@@
-CODE: 재무회계_주관식모음_04번
+CODE: 주관식모음_재무회계_04번
 ROUND: 21
 SUBJECT: 재무회계
 NO: 29
@@ -47,7 +47,7 @@ TABLE:
 CHOICES:
 ---
 @@@
-CODE: 재무회계_주관식모음_05번
+CODE: 주관식모음_재무회계_05번
 ROUND: 21
 SUBJECT: 재무회계
 NO: 30
@@ -59,7 +59,7 @@ TABLE:
 CHOICES:
 ---
 @@@
-CODE: 재무회계_주관식모음_06번
+CODE: 주관식모음_재무회계_06번
 ROUND: 20
 SUBJECT: 재무회계
 NO: 26
@@ -71,7 +71,7 @@ TABLE:
 CHOICES:
 ---
 @@@
-CODE: 재무회계_주관식모음_07번
+CODE: 주관식모음_재무회계_07번
 ROUND: 20
 SUBJECT: 재무회계
 NO: 27
@@ -83,7 +83,7 @@ TABLE:
 CHOICES:
 ---
 @@@
-CODE: 재무회계_주관식모음_08번
+CODE: 주관식모음_재무회계_08번
 ROUND: 20
 SUBJECT: 재무회계
 NO: 28
@@ -95,7 +95,7 @@ TABLE:
 CHOICES:
 ---
 @@@
-CODE: 재무회계_주관식모음_09번
+CODE: 주관식모음_재무회계_09번
 ROUND: 20
 SUBJECT: 재무회계
 NO: 29
@@ -107,7 +107,7 @@ TABLE:
 CHOICES:
 ---
 @@@
-CODE: 재무회계_주관식모음_10번
+CODE: 주관식모음_재무회계_10번
 ROUND: 20
 SUBJECT: 재무회계
 NO: 30
@@ -119,7 +119,7 @@ TABLE:
 CHOICES:
 ---
 @@@
-CODE: 재무회계_주관식모음_11번
+CODE: 주관식모음_재무회계_11번
 ROUND: 19
 SUBJECT: 재무회계
 NO: 26
@@ -131,7 +131,7 @@ TABLE:
 CHOICES:
 ---
 @@@
-CODE: 재무회계_주관식모음_12번
+CODE: 주관식모음_재무회계_12번
 ROUND: 19
 SUBJECT: 재무회계
 NO: 27
@@ -143,7 +143,7 @@ TABLE:
 CHOICES:
 ---
 @@@
-CODE: 재무회계_주관식모음_13번
+CODE: 주관식모음_재무회계_13번
 ROUND: 19
 SUBJECT: 재무회계
 NO: 28
@@ -155,7 +155,7 @@ TABLE:
 CHOICES:
 ---
 @@@
-CODE: 재무회계_주관식모음_14번
+CODE: 주관식모음_재무회계_14번
 ROUND: 19
 SUBJECT: 재무회계
 NO: 29
@@ -167,7 +167,7 @@ TABLE:
 CHOICES:
 ---
 @@@
-CODE: 재무회계_주관식모음_15번
+CODE: 주관식모음_재무회계_15번
 ROUND: 19
 SUBJECT: 재무회계
 NO: 30
