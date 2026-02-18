@@ -15,7 +15,7 @@ let manifest = null;
 let selectedSubject = null;
 let selectedRound = null;
 
-// ✅ 추가: 전체 회차 랜덤 모드
+// ✅ 전체 회차 랜덤 모드
 let isAllRoundsMode = false;
 
 let qItems = [];           // parsed questions for chosen round+subject
@@ -43,6 +43,18 @@ function normalizeCode(code){
   return s.replace(/_(\d+)번$/, (_, n) => `_${String(parseInt(n, 10))}번`);
 }
 
+/** ✅ round를 숫자/문자(예: "주관식모음") 모두 매칭하기 위한 정규화 */
+function normRound(v){
+  if(v === null || v === undefined) return "";
+  return String(v).trim();
+}
+
+/** NO 안전 변환 (문자/빈값 대응) */
+function toInt(v, fallback = 0){
+  const n = parseInt(String(v ?? "").trim(), 10);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 function downloadTxt(filename, text){
   const blob = new Blob([text], {type:"text/plain;charset=utf-8"});
   const a = document.createElement("a");
@@ -52,21 +64,18 @@ function downloadTxt(filename, text){
   URL.revokeObjectURL(a.href);
 }
 
+/** ✅ 라벨: 숫자면 "n회", 문자열이면 그대로 */
+function displayRoundLabel(r){
+  const s = normRound(r);
+  if(!s) return "";
+  return /^\d+$/.test(s) ? `${s}회` : s;
+}
+
 function roundLabel(){
-  return isAllRoundsMode ? "10~21회(전체)" : `${selectedRound}회`;
+  return isAllRoundsMode ? "10~21회(전체)" : displayRoundLabel(selectedRound);
 }
 
 /** ---------- TXT Parser ---------- **/
-/**
- * Record format:
- * @@@
- * KEY: value
- * Q:
- * multi line...
- * EX:
- * ...
- * ---
- */
 function parseRecords(txt){
   const t = txt.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   const parts = t.split("\n@@@\n").map(s => s.trim()).filter(Boolean);
@@ -122,12 +131,21 @@ async function loadManifest(){
   return await res.json();
 }
 
+/** ✅ findFile: round/subject를 String 기준으로 통일 비교 */
 function findFile(round, subject){
-  const hit = (manifest.files || []).find(f => f.round === round && f.subject === subject);
+  const rKey = normRound(round);
+  const sKey = String(subject ?? "").trim();
+
+  const hit = (manifest.files || []).find(f => {
+    const fr = normRound(f.round);
+    const fs = String(f.subject ?? "").trim();
+    return fr === rKey && fs === sKey;
+  });
+
   return hit || null;
 }
 
-// ✅ 단일 회차 로드
+// ✅ 단일 회차 로드 (숫자/문자 round 모두 가능)
 async function loadQA(round, subject){
   const file = findFile(round, subject);
   if(!file) throw new Error("선택한 회차/과목 파일이 없습니다.");
@@ -142,12 +160,10 @@ async function loadQA(round, subject){
 
   const [qTxt, aTxt] = await Promise.all([qRes.text(), aRes.text()]);
 
-  // Parse questions
   const qRecs = parseRecords("\n@@@\n" + qTxt.trim() + "\n");
   qItems = qRecs.map(r => {
     const rawCode = (r.CODE || "").trim();
 
-    // ✅ Q 라벨이 없으면 RAW를 문제 본문으로 fallback
     const qText =
       (r.Q && r.Q.trim()) ? r.Q :
       (r.QUESTION && r.QUESTION.trim()) ? r.QUESTION :
@@ -158,9 +174,11 @@ async function loadQA(round, subject){
       code: normalizeCode(rawCode),
       codeRaw: rawCode,
 
-      round: Number(r.ROUND),
-      subject: r.SUBJECT,
-      no: Number(r.NO),
+      // ✅ ROUND/NO가 비어있거나 문자인 경우에도 안전
+      round: (r.ROUND ?? normRound(round)),
+      subject: (r.SUBJECT ?? subject),
+      no: toInt(r.NO, 0),
+
       type: (r.TYPE || "").toUpperCase(),
       point: r.POINT ? Number(r.POINT) : null,
 
@@ -172,7 +190,6 @@ async function loadQA(round, subject){
     };
   });
 
-  // Parse answers
   const aRecs = parseRecords("\n@@@\n" + aTxt.trim() + "\n");
   aMap = new Map();
   aRecs.forEach(r => {
@@ -186,16 +203,24 @@ async function loadQA(round, subject){
   });
 }
 
-// ✅ 추가: 전체 회차(해당 과목) 로드 → 합쳐서 qItems/aMap 구성
+// ✅ 전체 회차(해당 과목) 로드 → 합쳐서 qItems/aMap 구성
+//   - "재무회계_주관식모음" 같은 신규 파일이 files에 있어도 자동 포함
 async function loadAllRoundsQA(subject){
   qItems = [];
   aMap = new Map();
 
-  const files = (manifest.files || []).filter(f => f.subject === subject);
+  const files = (manifest.files || []).filter(f => String(f.subject ?? "").trim() === String(subject ?? "").trim());
   if(!files.length) throw new Error("해당 과목에 등록된 files가 없습니다.");
 
-  // round 기준 정렬(없어도 되지만 안정성)
-  files.sort((a,b) => (a.round||0) - (b.round||0));
+  // 숫자 round 먼저, 그 다음 문자열 round
+  files.sort((a,b) => {
+    const ar = normRound(a.round), br = normRound(b.round);
+    const an = /^\d+$/.test(ar), bn = /^\d+$/.test(br);
+    if(an && bn) return parseInt(ar,10) - parseInt(br,10);
+    if(an && !bn) return -1;
+    if(!an && bn) return 1;
+    return ar.localeCompare(br);
+  });
 
   for(const file of files){
     const [qRes, aRes] = await Promise.all([
@@ -221,9 +246,10 @@ async function loadAllRoundsQA(subject){
         code: normalizeCode(rawCode),
         codeRaw: rawCode,
 
-        round: Number(r.ROUND),
-        subject: r.SUBJECT,
-        no: Number(r.NO),
+        round: (r.ROUND ?? normRound(file.round)),
+        subject: (r.SUBJECT ?? subject),
+        no: toInt(r.NO, 0),
+
         type: (r.TYPE || "").toUpperCase(),
         point: r.POINT ? Number(r.POINT) : null,
 
@@ -284,7 +310,7 @@ function renderRoundGrid(){
   rounds.forEach(r => {
     const b = document.createElement("button");
     b.className = "chip";
-    b.textContent = `${r}회`;
+    b.textContent = displayRoundLabel(r);
 
     if(selectedSubject){
       const has = !!findFile(r, selectedSubject);
@@ -292,7 +318,6 @@ function renderRoundGrid(){
     }
 
     b.onclick = () => {
-      // ✅ 특정 회차를 누르면 전체모드 해제
       isAllRoundsMode = false;
       selectedRound = r;
 
@@ -335,22 +360,32 @@ function updateHomeHint(){
     return;
   }
 
-  if(!selectedRound){
+  if(selectedRound === null || selectedRound === undefined){
     hint.textContent = "회차를 선택하세요. (또는 '10~21회 전체 랜덤'을 선택하세요)";
     return;
   }
 
   const file = findFile(selectedRound, selectedSubject);
   hint.textContent = file
-    ? `선택됨: ${selectedRound}회 / ${selectedSubject}  ·  문제: ${file.q}  ·  답안: ${file.a}`
+    ? `선택됨: ${displayRoundLabel(selectedRound)} / ${selectedSubject}  ·  문제: ${file.q}  ·  답안: ${file.a}`
     : "선택한 조합의 TXT 파일이 없습니다. manifest.json의 files에 등록하세요.";
 }
 
 /** ---------- Quiz Flow ---------- **/
 function buildQuiz(count){
   const pool = qItems.slice().sort((a,b)=>{
-    // 전체모드에서도 안정적으로: round → no → code
-    if((a.round||0) !== (b.round||0)) return (a.round||0) - (b.round||0);
+    const ar = normRound(a.round), br = normRound(b.round);
+    const an = /^\d+$/.test(ar), bn = /^\d+$/.test(br);
+    if(an && bn){
+      const d = parseInt(ar,10) - parseInt(br,10);
+      if(d) return d;
+    } else if(an && !bn) return -1;
+    else if(!an && bn) return 1;
+    else {
+      const d = ar.localeCompare(br);
+      if(d) return d;
+    }
+
     if((a.no||0) !== (b.no||0)) return (a.no||0) - (b.no||0);
     return String(a.code).localeCompare(String(b.code));
   });
@@ -366,22 +401,17 @@ function renderQuestion(){
   const total = quiz.length;
 
   $("meta").textContent = `${idx+1} / ${total} · ${item.code}`;
-
   $("qText").textContent = item.q || "";
 
   if((item.ex || "").trim()){
     $("exText").textContent = item.ex;
     show("exBlock");
-  } else {
-    hide("exBlock");
-  }
+  } else hide("exBlock");
 
   if((item.table || "").trim()){
     $("tableHost").textContent = item.table;
     show("tableBlock");
-  } else {
-    hide("tableBlock");
-  }
+  } else hide("tableBlock");
 
   const area = $("answerArea");
   area.innerHTML = "";
@@ -489,7 +519,6 @@ function gradeAndBuildWrongNote(){
     else wrong.push({ item, ua: ua || "(미입력)", ca, expl: a?.expl || "" });
   }
 
-  // 오답노트 TXT (문제 포함)
   let t = "";
   t += "[오답노트]\n";
   t += `과목: ${selectedSubject}\n`;
@@ -543,12 +572,11 @@ $("btnStart").onclick = async () => {
     $("homeHint").textContent = "과목을 먼저 선택하세요.";
     return;
   }
-  if(!isAllRoundsMode && !selectedRound){
+  if(!isAllRoundsMode && (selectedRound === null || selectedRound === undefined)){
     $("homeHint").textContent = "회차를 선택하거나, '10~21회 전체 랜덤'을 선택하세요.";
     return;
   }
 
-  // 단일모드일 때만 file 체크
   if(!isAllRoundsMode){
     const file = findFile(selectedRound, selectedSubject);
     if(!file){
